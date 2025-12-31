@@ -52,7 +52,7 @@
                 <label>แนบรูปภาพกิจกรรม:</label>
                 <input type="file" id="actImage" accept="image/*" style="padding:10px; background:#fff;">
             </div>
-            <button onclick="submitActivity()"><i class="fas fa-save"></i> บันทึกข้อมูล</button>
+            <button id="btnSubmitActivity" onclick="submitActivity()"><i class="fas fa-save"></i> บันทึกข้อมูล</button>
         </div>
     </div>
 
@@ -116,7 +116,8 @@
 </div>
 
 <script>
-    const API_URL = "https://script.google.com/macros/s/AKfycbzzVff4uCKpwSofyqTBGYGn_JlV-Yt30aAsukLF29v3CsNvF3OWhbA5EHr7Bq-ldIOZ/exec";
+    // --- ตั้งค่า API URL ตรงนี้ ---
+    const API_URL = "https://script.google.com/macros/s/AKfycbwo957Zbpom3vrp_fNY5sj9-mDBvsroDN80vuZRvRsdEa_ahF_Zw0cTX55mZOXTi48a/exec";
     const UPLOAD_URL = API_URL;
 
     let currentUser = null;
@@ -124,7 +125,6 @@
     let userData = null;
     let activitiesData = [];
 
-    // ตรวจสอบ session
     window.onload = function() {
         const session = getSession();
         if (!session) {
@@ -135,22 +135,16 @@
         loadUserData();
     };
 
-    // ฟังก์ชันจัดการ Session
     function getSession() {
         const sessionStr = localStorage.getItem('volunteerSession');
         if (!sessionStr) return null;
-
         try {
             const session = JSON.parse(sessionStr);
             const now = new Date().getTime();
-            const sessionAge = now - session.timestamp;
-            const maxAge = 24 * 60 * 60 * 1000;
-
-            if (sessionAge > maxAge) {
+            if ((now - session.timestamp) > (24 * 60 * 60 * 1000)) {
                 localStorage.removeItem('volunteerSession');
                 return null;
             }
-
             return session;
         } catch (e) {
             localStorage.removeItem('volunteerSession');
@@ -159,26 +153,20 @@
     }
 
     function saveSession(user) {
-        const session = {
-            user: user,
-            timestamp: new Date().getTime()
-        };
-        localStorage.setItem('volunteerSession', JSON.stringify(session));
+        localStorage.setItem('volunteerSession', JSON.stringify({ user: user, timestamp: new Date().getTime() }));
     }
 
     async function hashPassword(password) {
         const encoder = new TextEncoder();
         const data = encoder.encode(password);
         const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-        const hashArray = Array.from(new Uint8Array(hashBuffer));
-        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
     }
 
     async function loadUserData() {
         try {
             const response = await fetch(`${API_URL}?action=getUser&uid=${currentUser.uid}`);
             const result = await response.json();
-            
             if (result.status === 'success') {
                 userData = result.user;
                 currentUser = result.user;
@@ -189,19 +177,42 @@
                 document.getElementById('actUserName').value = userData.name || "";
                 document.getElementById('notifyEmail').checked = userData.emailNotify !== false;
             }
-            
+            // โหลดประวัติทันทีหลังจากได้ข้อมูล User
             loadHistory();
         } catch (error) {
             console.error('Error loading user:', error);
-            Swal.fire('เกิดข้อผิดพลาด', 'ไม่สามารถโหลดข้อมูลผู้ใช้', 'error');
         }
     }
 
+    function formatDateThai(dateStr) {
+        if (!dateStr) return '-';
+        const date = new Date(dateStr);
+        if (isNaN(date.getTime())) return dateStr;
+        // แปลงเป็นรูปแบบ: 31 ธ.ค. 2568
+        return date.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' });
+    }
+
+    function formatTimeDisplay(timeStr) {
+        if (!timeStr) return '';
+        if (timeStr.includes('T') || timeStr.includes('GMT')) {
+            const date = new Date(timeStr);
+            if (!isNaN(date.getTime())) {
+                return date.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+            }
+        }
+        return timeStr.substring(0, 5);
+    }
+
+    // ==========================================
+    // ฟังก์ชันโหลดประวัติ (แก้ปัญหาซ้ำตรงนี้)
+    // ==========================================
     async function loadHistory() {
         const tbody = document.getElementById('tableBody');
         const loading = document.getElementById('historyLoading');
-        loading.classList.remove('hidden');
+        
+        // 1. เคลียร์ของเก่าทิ้งทันที!
         tbody.innerHTML = "";
+        loading.classList.remove('hidden');
         
         try {
             const response = await fetch(`${API_URL}?action=getActivities&userId=${currentUser.uid}`);
@@ -223,40 +234,46 @@
                 
                 let totalHours = 0, approvedHours = 0, pendingHours = 0;
                 
+                // 2. ใช้ Set เพื่อจำ ID ที่แสดงไปแล้ว (ป้องกันการเบิ้ล 100%)
+                const seenIds = new Set();
+                let htmlBuffer = ""; // เก็บ HTML ไว้ก่อน ค่อยพ่นออกมาทีเดียว
+
                 activitiesData.forEach(d => {
+                    // *** จุดสำคัญ: ถ้า ID นี้มีแล้ว ให้ข้ามเลย ***
+                    if (seenIds.has(d.id)) return;
+                    seenIds.add(d.id);
+
                     activitiesDataMap[d.id] = d;
                     
-                    // --- ส่วนที่แก้ไขเพื่อแก้ปัญหาตาราง: เปลี่ยนมาใช้ span แทนการใส่ class ที่ td ---
                     const badgeClass = d.status === 'approved' ? 'badge-approved' : 'badge-pending';
                     const statusText = d.status === 'approved' ? 'อนุมัติแล้ว' : 'รอตรวจสอบ';
-                    
                     const hours = parseFloat(d.hours) || 0;
+                    
                     totalHours += hours;
                     if (d.status === 'approved') approvedHours += hours;
                     else pendingHours += hours;
                     
-                    let downloadBtn = '';
-                    if (d.status === 'approved') {
-                        downloadBtn = `<button onclick="printSingleActivityWrapper('${d.id}')" style="background:#3498db; padding:10px 20px; font-size:16px; width:auto; border-radius:5px;"><i class="fas fa-print"></i></button>`;
-                    } else {
-                        downloadBtn = `<span style="color:#ccc;">-</span>`;
-                    }
+                    const downloadBtn = d.status === 'approved' 
+                        ? `<button onclick="printSingleActivityWrapper('${d.id}')" style="background:#3498db; padding:5px 10px; border-radius:5px;"><i class="fas fa-print"></i></button>` 
+                        : `<span style="color:#ccc;">-</span>`;
 
-                    tbody.innerHTML += `
+                    const displayDate = formatDateThai(d.date);
+                    const displayTime = formatTimeDisplay(d.time);
+
+                    htmlBuffer += `
                         <tr>
-                            <td data-label="วัน/เวลา">${d.date || '-'} <small>(${d.time || '-'})</small></td>
+                            <td data-label="วัน/เวลา">${displayDate} <small style="color:#666; display:block;">${displayTime}</small></td>
                             <td data-label="กิจกรรม">${d.activityName || '-'}</td>
                             <td data-label="สถานที่">${d.place || '-'}</td>
                             <td data-label="ผู้รับผิดชอบ">${d.personInCharge || '-'}</td>
                             <td data-label="ชั่วโมง"><strong>${hours}</strong></td>
-                            
-                            <td data-label="สถานะ" style="text-align:center;">
-                                <span class="status-badge ${badgeClass}">${statusText}</span>
-                            </td>
-
+                            <td data-label="สถานะ" style="text-align:center;"><span class="status-badge ${badgeClass}">${statusText}</span></td>
                             <td data-label="ใบรับรอง" style="text-align:center;">${downloadBtn}</td>
                         </tr>`;
                 });
+                
+                // 3. แปะ HTML ทีเดียวตูมเดียว
+                tbody.innerHTML = htmlBuffer;
                 
                 updateLocalHoursDisplay(totalHours, approvedHours, pendingHours);
                 updateUserHours(totalHours, approvedHours, pendingHours);
@@ -280,17 +297,9 @@
         try {
             await fetch(API_URL, {
                 method: 'POST',
-                body: JSON.stringify({
-                    action: 'updateUser',
-                    uid: currentUser.uid,
-                    totalHours: total,
-                    approvedHours: approved,
-                    pendingHours: pending
-                })
+                body: JSON.stringify({ action: 'updateUser', uid: currentUser.uid, totalHours: total, approvedHours: approved, pendingHours: pending })
             });
-        } catch (error) {
-            console.error('Error updating hours:', error);
-        }
+        } catch (e) {}
     }
 
     function showSection(id) {
@@ -313,7 +322,7 @@
             return Swal.fire('ข้อมูลไม่ครบ', 'กรุณากรอกให้ครบและแนบรูป', 'warning');
         }
         
-        const btn = document.querySelector('#activityList button');
+        const btn = document.getElementById('btnSubmitActivity');
         const oldText = btn.innerHTML;
         btn.disabled = true;
         btn.innerHTML = "<i class='fas fa-spinner fa-spin'></i> กำลังบันทึก...";
@@ -326,46 +335,34 @@
                 
                 const uploadRes = await fetch(UPLOAD_URL, {
                     method: 'POST',
-                    body: JSON.stringify({
-                        base64: base64Data,
-                        mimeType: file.type,
-                        filename: `${currentUser.uid}_${Date.now()}`
-                    })
+                    body: JSON.stringify({ base64: base64Data, mimeType: file.type, filename: `${currentUser.uid}_${Date.now()}` })
                 });
                 const uploadResult = await uploadRes.json();
-                
                 if (uploadResult.status !== "success") throw new Error("Upload Failed");
 
                 const actRes = await fetch(API_URL, {
                     method: 'POST',
                     body: JSON.stringify({
-                        action: 'createActivity',
-                        userId: currentUser.uid,
-                        userName: userName,
-                        studentId: userData?.studentId || '',
-                        activityName: name,
-                        place: place,
-                        date: date,
-                        time: time,
-                        hours: hours,
-                        personInCharge: person,
-                        imageUrl: uploadResult.url,
-                        status: 'pending'
+                        action: 'createActivity', userId: currentUser.uid, userName: userName, studentId: userData?.studentId || '',
+                        activityName: name, place: place, date: date, time: time, hours: hours, personInCharge: person,
+                        imageUrl: uploadResult.url, status: 'pending'
                     })
                 });
                 const actResult = await actRes.json();
                 
                 if (actResult.status === 'success') {
-                    Swal.fire('สำเร็จ', 'บันทึกเรียบร้อย', 'success').then(() => {
-                        document.getElementById('actName').value = '';
-                        document.getElementById('actPlace').value = '';
-                        document.getElementById('actDate').value = '';
-                        document.getElementById('actTime').value = '';
-                        document.getElementById('actHours').value = '';
-                        document.getElementById('actPerson').value = '';
-                        document.getElementById('actImage').value = '';
-                        showSection('historyList');
-                    });
+                    if (actResult.message === 'Activity already exists') {
+                         Swal.fire('แจ้งเตือน', 'คุณได้บันทึกกิจกรรมนี้ไปแล้ว', 'info');
+                    } else {
+                         Swal.fire('สำเร็จ', 'บันทึกเรียบร้อย', 'success');
+                    }
+                    document.getElementById('actName').value = '';
+                    document.getElementById('actPlace').value = '';
+                    document.getElementById('actHours').value = '';
+                    document.getElementById('actImage').value = '';
+                    showSection('historyList');
+                } else {
+                    throw new Error(actResult.message || 'Error saving activity');
                 }
             } catch (e) {
                 Swal.fire('Error', e.message, 'error');
@@ -379,93 +376,40 @@
     async function updateProfile() {
         const name = document.getElementById('editName').value.trim();
         if(!name) return;
-        
         try {
-            const response = await fetch(API_URL, {
-                method: 'POST',
-                body: JSON.stringify({
-                    action: 'updateUser',
-                    uid: currentUser.uid,
-                    name: name
-                })
-            });
-            const result = await response.json();
-            
-            if (result.status === 'success') {
+            const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'updateUser', uid: currentUser.uid, name: name }) });
+            if ((await res.json()).status === 'success') {
                 Swal.fire('สำเร็จ', 'บันทึกชื่อแล้ว', 'success');
                 currentUser.name = name;
                 saveSession(currentUser);
                 loadUserData();
             }
-        } catch (error) {
-            Swal.fire('เกิดข้อผิดพลาด', error.message, 'error');
-        }
+        } catch (e) { Swal.fire('Error', e.message, 'error'); }
     }
 
     async function savePreferences() {
         const emailNotify = document.getElementById('notifyEmail').checked;
-        
         try {
-            const response = await fetch(API_URL, {
-                method: 'POST',
-                body: JSON.stringify({
-                    action: 'updateUser',
-                    uid: currentUser.uid,
-                    emailNotify: emailNotify
-                })
-            });
-            const result = await response.json();
-            
-            if (result.status === 'success') {
-                Swal.fire('สำเร็จ', 'บันทึกการตั้งค่าแล้ว', 'success');
-            }
-        } catch (error) {
-            Swal.fire('เกิดข้อผิดพลาด', error.message, 'error');
-        }
+            const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'updateUser', uid: currentUser.uid, emailNotify: emailNotify }) });
+            if ((await res.json()).status === 'success') Swal.fire('สำเร็จ', 'บันทึกการตั้งค่าแล้ว', 'success');
+        } catch (e) { Swal.fire('Error', e.message, 'error'); }
     }
 
     async function changePassword() {
         const oldPass = document.getElementById('oldPassword').value;
         const newPass = document.getElementById('newPassword').value;
-
-        if (!oldPass || !newPass) {
-            return Swal.fire('ข้อมูลไม่ครบ', 'กรุณากรอกทั้งรหัสผ่านเดิมและรหัสผ่านใหม่', 'warning');
-        }
-        if (newPass.length < 6) {
-            return Swal.fire('รหัสผ่านสั้นเกินไป', 'รหัสผ่านใหม่ต้องมีอย่างน้อย 6 ตัวอักษร', 'warning');
-        }
+        if (!oldPass || !newPass || newPass.length < 6) return Swal.fire('ข้อมูลไม่ถูกต้อง', 'กรุณากรอกข้อมูลให้ครบ (รหัสผ่านใหม่ต้อง 6 ตัวขึ้นไป)', 'warning');
 
         try {
             const oldPassHash = await hashPassword(oldPass);
             const newPassHash = await hashPassword(newPass);
-
-            const response = await fetch(API_URL, {
-                method: 'POST',
-                body: JSON.stringify({
-                    action: 'changePassword',
-                    uid: currentUser.uid,
-                    oldPasswordHash: oldPassHash,
-                    newPasswordHash: newPassHash
-                })
-            });
-
-            const result = await response.json();
-
-            if (result.status === 'success') {
-                Swal.fire({
-                    icon: 'success',
-                    title: 'เปลี่ยนรหัสผ่านสำเร็จ',
-                    text: 'กรุณาเข้าสู่ระบบใหม่ด้วยรหัสผ่านใหม่',
-                    confirmButtonText: 'ตกลง'
-                }).then(() => {
-                    logout();
-                });
+            const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'changePassword', uid: currentUser.uid, oldPasswordHash: oldPassHash, newPasswordHash: newPassHash }) });
+            if ((await res.json()).status === 'success') {
+                Swal.fire('สำเร็จ', 'เปลี่ยนรหัสผ่านแล้ว กรุณาเข้าสู่ระบบใหม่', 'success').then(() => logout());
             } else {
-                Swal.fire('เกิดข้อผิดพลาด', result.message || 'รหัสผ่านเดิมไม่ถูกต้อง', 'error');
+                Swal.fire('ผิดพลาด', 'รหัสผ่านเดิมไม่ถูกต้อง', 'error');
             }
-        } catch (error) {
-            Swal.fire('เกิดข้อผิดพลาด', error.message, 'error');
-        }
+        } catch (e) { Swal.fire('Error', e.message, 'error'); }
     }
 
     function contactAdmin(type) {
@@ -479,128 +423,79 @@
     }
 
     // ==========================================
-    // PDF Functions - ใส่ฟอนต์ Base64 ตรงนี้
+    // PDF Generator Section
     // ==========================================
-    
     async function loadThaiFont(doc) {
-        const fontRegular = ``; // ใส่ Base64 ตรงนี้
-        const fontBold = ``;    // ใส่ Base64 ตรงนี้
+        // ⚠️ อย่าลืมเอา Base64 ฟอนต์มาใส่ตรงนี้นะครับ ไม่งั้น PDF จะไม่แสดงภาษาไทย ⚠️
+        const fontRegular = "ใส่_BASE64_ของฟอนต์_THSARABUN_REGULAR_ตรงนี้"; 
+        const fontBold = "ใส่_BASE64_ของฟอนต์_THSARABUN_BOLD_ตรงนี้"; 
 
-        if (fontRegular.length < 100 || fontBold.length < 100) {
-            await Swal.fire({
-                icon: 'error',
-                title: 'ยังไม่ใส่ฟอนต์',
-                text: 'กรุณาแปลงไฟล์ THSarabun เป็น Base64 แล้วนำมาวางในโค้ดก่อนใช้งานครับ',
-            });
+        if (fontRegular.includes('ใส่_BASE64') || fontRegular.length < 100) {
+            await Swal.fire({ icon: 'error', title: 'ยังไม่ใส่ฟอนต์', text: 'กรุณาใส่ Base64 Font ในโค้ดก่อนใช้งานครับ' });
             return false;
         }
-
         try {
             doc.addFileToVFS("THSarabun-Regular.ttf", fontRegular);
             doc.addFileToVFS("THSarabun-Bold.ttf", fontBold);
             doc.addFont("THSarabun-Regular.ttf", "THSarabun", "normal");
             doc.addFont("THSarabun-Bold.ttf", "THSarabun", "bold");
             return true;
-        } catch (e) {
-            Swal.fire('Font Error', 'รูปแบบ Base64 ไม่ถูกต้อง', 'error');
-            return false;
-        }
+        } catch (e) { return false; }
     }
 
     async function exportTablePDF() {
-        try {
-            if (!window.jspdf) throw new Error("ไลบรารี jsPDF ยังไม่โหลด");
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF({ orientation: 'landscape' });
-            
-            Swal.fire({title: 'กำลังสร้าง PDF...', allowOutsideClick: false, didOpen: () => Swal.showLoading()});
-            
-            const fontSuccess = await loadThaiFont(doc);
-            if (!fontSuccess) return;
+        if (!window.jspdf) return;
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ orientation: 'landscape' });
+        Swal.showLoading();
+        if (!(await loadThaiFont(doc))) return;
 
-            doc.setFont('THSarabun', 'bold');
-            doc.setFontSize(22); 
-            doc.text("รายงานประวัติกิจกรรมจิตอาสา", 14, 20);
-            
-            doc.autoTable({ 
-                html: '#logsTable', 
-                startY: 25, 
-                theme: 'grid', 
-                styles: { font: "THSarabun", fontStyle: 'normal', fontSize: 12, cellPadding: 2, lineColor: [200, 200, 200], lineWidth: 0.1, valign: 'middle', overflow: 'linebreak' }, 
-                headStyles: { font: "THSarabun", fontStyle: 'bold', fontSize: 14, fillColor: [44, 62, 80], textColor: [255, 255, 255], halign: 'center' },
-                bodyStyles: { textColor: [0, 0, 0] },
-                columnStyles: {
-                    0: { halign: 'center', cellWidth: 40 },
-                    1: { halign: 'left', cellWidth: 'auto' },
-                    2: { halign: 'left', cellWidth: 'auto' },
-                    3: { halign: 'left', cellWidth: 'auto' },
-                    4: { halign: 'center', cellWidth: 15 },
-                    5: { halign: 'center', cellWidth: 30 },
-                    6: { halign: 'center', cellWidth: 20 }
-                },
-                columns: [ { dataKey: 0 }, { dataKey: 1 }, { dataKey: 2 }, { dataKey: 3 }, { dataKey: 4 }, { dataKey: 5 } ]
-            });
-            Swal.close();
-            doc.save('activity-log.pdf');
-        } catch (err) {
-            Swal.fire('เกิดข้อผิดพลาด', err.message, 'error');
-        }
+        doc.setFont('THSarabun', 'bold');
+        doc.setFontSize(22); 
+        doc.text("รายงานประวัติกิจกรรมจิตอาสา", 14, 20);
+        
+        doc.autoTable({ 
+            html: '#logsTable', startY: 25, 
+            styles: { font: "THSarabun", fontSize: 12 }, 
+            headStyles: { font: "THSarabun", fontStyle: 'bold', fontSize: 14, fillColor: [44, 62, 80] },
+            columnStyles: { 6: { cellWidth: 0 } }, 
+            didParseCell: function(data) {
+                if (data.column.index === 6) data.cell.text = ''; 
+            }
+        });
+        Swal.close();
+        doc.save('activity-log.pdf');
     }
 
     async function printTotalCertificate() {
-        try {
-            const totalApprovedHours = userData?.approvedHours || 0;
-            const userName = userData?.name || currentUser.email;
+        const totalApprovedHours = userData?.approvedHours || 0;
+        if (totalApprovedHours <= 0) return Swal.fire('แจ้งเตือน', 'ยังไม่มีชั่วโมงที่อนุมัติ', 'warning');
+        
+        Swal.showLoading();
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        if (!(await loadThaiFont(doc))) return;
 
-            if (totalApprovedHours <= 0) {
-                return Swal.fire('ไม่สามารถออกใบรับรองได้', 'คุณยังไม่มีชั่วโมงจิตอาสาที่ได้รับการอนุมัติ', 'warning');
-            }
-            
-            Swal.fire({title: 'กำลังสร้างใบรับรอง...', allowOutsideClick: false, didOpen: () => Swal.showLoading()});
-
-            if (!window.jspdf) throw new Error("ไลบรารี jsPDF ยังไม่โหลด");
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-            
-            const fontSuccess = await loadThaiFont(doc);
-            if (!fontSuccess) return;
-
-            generateCertificateLayout(doc, userName, "กิจกรรมจิตอาสาเพื่อพัฒนาตนเองและสังคม", "มหาวิทยาลัยราชภัฏ...", "ตลอดปีการศึกษา", `${totalApprovedHours} ชั่วโมง`);
-            doc.save("ใบรับรองรวมชั่วโมง.pdf");
-            Swal.close();
-        } catch (err) {
-            Swal.fire('เกิดข้อผิดพลาด', err.message, 'error');
-        }
+        generateCertificateLayout(doc, userData?.name || currentUser.email, "กิจกรรมจิตอาสาเพื่อพัฒนาตนเองและสังคม", "มหาวิทยาลัย...", "ตลอดปีการศึกษา", `${totalApprovedHours} ชั่วโมง`);
+        doc.save("ใบรับรองรวม.pdf");
+        Swal.close();
     }
 
     function printSingleActivityWrapper(id) {
-        printSingleActivity(id);
+        const act = activitiesDataMap[id];
+        if(act) printSingleActivity(act);
     }
 
-    async function printSingleActivity(activityId) {
-        try {
-            const act = activitiesDataMap[activityId];
-            if (!act) return;
+    async function printSingleActivity(act) {
+        Swal.showLoading();
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        if (!(await loadThaiFont(doc))) return;
 
-            Swal.fire({title: 'กำลังสร้างใบรับรอง...', allowOutsideClick: false, didOpen: () => Swal.showLoading()});
-
-            if (!window.jspdf) throw new Error("ไลบรารี jsPDF ยังไม่โหลด");
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-            
-            const fontSuccess = await loadThaiFont(doc);
-            if (!fontSuccess) return;
-
-            const d = new Date(act.date);
-            const monthNames = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
-            const dateStr = `${d.getDate()} ${monthNames[d.getMonth()]} ${d.getFullYear() + 543}`;
-
-            generateCertificateLayout(doc, act.userName || "ผู้เข้าร่วม", act.activityName, act.place, dateStr, `${act.hours} ชั่วโมง`);
-            doc.save(`ใบรับรอง_${act.activityName}.pdf`);
-            Swal.close();
-        } catch (err) {
-            Swal.fire('เกิดข้อผิดพลาด', err.message, 'error');
-        }
+        const dateStr = formatDateThai(act.date);
+        generateCertificateLayout(doc, act.userName || "ผู้เข้าร่วม", act.activityName, act.place, dateStr, `${act.hours} ชั่วโมง`);
+        doc.save(`ใบรับรอง_${act.activityName}.pdf`);
+        Swal.close();
     }
 
     function generateCertificateLayout(doc, name, activityName, place, dateStr, hours) {
@@ -610,15 +505,12 @@
         doc.setFont('THSarabun', 'bold');
         doc.setFontSize(24);
         doc.text("หนังสือรับรอง", centerX, 45, { align: "center" });
-
         doc.setFontSize(18);
         doc.text("กิจกรรมจิตอาสาบำเพ็ญประโยชน์ต่อสังคม", centerX, 55, { align: "center" });
 
         doc.setFont('THSarabun', 'normal');
         doc.setFontSize(14); 
-        
-        let startY = 80;
-        const lineGap = 8; 
+        let startY = 80; const lineGap = 8; 
 
         doc.text(`หนังสือรับรองฉบับนี้ออกไว้เพื่อรับรองว่า ${name}`, centerX, startY, { align: "center" });
         startY += lineGap;
@@ -629,29 +521,13 @@
         doc.text(`คิดเป็นชั่วโมงจิตอาสาจำนวน ${hours}`, centerX, startY, { align: "center" });
 
         startY += (lineGap * 2.5); 
-        const today = new Date();
-        const monthNames = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
-        const dateText = `ให้ไว้ ณ วันที่ ${today.getDate()} เดือน ${monthNames[today.getMonth()]} พ.ศ. ${today.getFullYear() + 543}`;
-        doc.text(dateText, centerX, startY, { align: "center" });
+        const today = formatDateThai(new Date().toISOString());
+        doc.text(`ให้ไว้ ณ วันที่ ${today}`, centerX, startY, { align: "center" });
 
-        const signY = startY + 40; 
-        const signX = 130; 
+        const signY = startY + 40; const signX = 130; 
         doc.text("(.......................................................)", signX, signY, { align: "center" });
         doc.setFont('THSarabun', 'bold');
-        doc.text("รองผู้อำนวยการศูนย์จิตอาสาฯ", signX, signY + 8, { align: "center" });
-        doc.setFont('THSarabun', 'normal');
-        doc.text("ปฏิบัติราชการแทนอธิการบดี", signX, signY + 16, { align: "center" });
-
-        const footerX = 25;
-        const footerY = 240; 
-        doc.setFont('THSarabun', 'normal');
-        doc.setFontSize(14);
-        doc.text("ผู้ควบคุมการทำกิจกรรม", footerX, footerY);
-        doc.setFont('THSarabun', 'bold');
-        doc.text("นายอานัส เบ็กฮาวัน", footerX, footerY + 8);
-        doc.setFont('THSarabun', 'normal');
-        doc.text("นักวิชาการศึกษา กองพัฒนานักศึกษา", footerX, footerY + 16);
-        doc.text("โทร 064-9019989", footerX, footerY + 24);
+        doc.text("ผู้มีอำนาจลงนาม", signX, signY + 8, { align: "center" });
     }
 </script>
 </body>
