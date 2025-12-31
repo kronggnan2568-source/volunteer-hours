@@ -1,0 +1,306 @@
+// ========================================
+// Google Apps Script - Backend API
+// ========================================
+
+// ตั้งค่า ID ของ Google Sheets และ Drive Folder
+const SPREADSHEET_ID = "YOUR_SPREADSHEET_ID_HERE"; // เปลี่ยนเป็น ID ของ Sheets ที่สร้าง
+const FOLDER_ID = "11SSszD38sHlRwjFy-vbQY6B9Hc2Po7Fv"; // ID โฟลเดอร์สำหรับเก็บรูป
+
+// ฟังก์ชันหลักรับ HTTP Requests
+function doPost(e) {
+  try {
+    const params = JSON.parse(e.postData.contents);
+    const action = params.action;
+
+    // ถ้าเป็นการอัพโหลดรูป
+    if (params.base64 && params.mimeType) {
+      return uploadImage(params);
+    }
+
+    // API Routing
+    switch(action) {
+      case 'getUser': return getUser(params.uid);
+      case 'createUser': return createUser(params);
+      case 'updateUser': return updateUser(params);
+      case 'getActivities': return getActivities(params.userId);
+      case 'getAllActivities': return getAllActivities();
+      case 'createActivity': return createActivity(params);
+      case 'updateActivity': return updateActivity(params);
+      case 'deleteActivity': return deleteActivity(params.id);
+      case 'checkStudentId': return checkStudentId(params.studentId);
+      default: return jsonResponse({ status: 'error', message: 'Invalid action' });
+    }
+  } catch (error) {
+    return jsonResponse({ status: 'error', message: error.toString() });
+  }
+}
+
+function doGet(e) {
+  const action = e.parameter.action;
+  
+  try {
+    switch(action) {
+      case 'getUser': return jsonResponse(getUserData(e.parameter.uid));
+      case 'getActivities': return jsonResponse(getActivitiesData(e.parameter.userId));
+      case 'getAllActivities': return jsonResponse(getAllActivitiesData());
+      default: return jsonResponse({ status: 'error', message: 'Invalid action' });
+    }
+  } catch (error) {
+    return jsonResponse({ status: 'error', message: error.toString() });
+  }
+}
+
+// ========================================
+// Image Upload Function
+// ========================================
+function uploadImage(data) {
+  try {
+    const blob = Utilities.newBlob(
+      Utilities.base64Decode(data.base64), 
+      data.mimeType, 
+      data.filename
+    );
+    
+    const folder = DriveApp.getFolderById(FOLDER_ID);
+    const file = folder.createFile(blob);
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    
+    const fileId = file.getId();
+    const publicUrl = "https://drive.google.com/uc?export=view&id=" + fileId;
+
+    return jsonResponse({ status: "success", url: publicUrl });
+  } catch (error) {
+    return jsonResponse({ status: "error", message: error.toString() });
+  }
+}
+
+// ========================================
+// Users Functions
+// ========================================
+function getUser(uid) {
+  const data = getUserData(uid);
+  return jsonResponse(data);
+}
+
+function getUserData(uid) {
+  const sheet = getSheet('Users');
+  const data = sheet.getDataRange().getValues();
+  
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] === uid) {
+      return {
+        status: 'success',
+        user: {
+          uid: data[i][0],
+          name: data[i][1],
+          email: data[i][2],
+          studentId: data[i][3],
+          totalHours: data[i][4] || 0,
+          approvedHours: data[i][5] || 0,
+          pendingHours: data[i][6] || 0,
+          role: data[i][7] || 'user',
+          emailNotify: data[i][8] !== false
+        }
+      };
+    }
+  }
+  
+  return { status: 'not_found' };
+}
+
+function createUser(params) {
+  const sheet = getSheet('Users');
+  sheet.appendRow([
+    params.uid,
+    params.name,
+    params.email,
+    params.studentId || '',
+    0, // totalHours
+    0, // approvedHours
+    0, // pendingHours
+    params.role || 'user',
+    true // emailNotify
+  ]);
+  
+  return jsonResponse({ status: 'success' });
+}
+
+function updateUser(params) {
+  const sheet = getSheet('Users');
+  const data = sheet.getDataRange().getValues();
+  
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] === params.uid) {
+      if (params.name !== undefined) sheet.getRange(i + 1, 2).setValue(params.name);
+      if (params.totalHours !== undefined) sheet.getRange(i + 1, 5).setValue(params.totalHours);
+      if (params.approvedHours !== undefined) sheet.getRange(i + 1, 6).setValue(params.approvedHours);
+      if (params.pendingHours !== undefined) sheet.getRange(i + 1, 7).setValue(params.pendingHours);
+      if (params.role !== undefined) sheet.getRange(i + 1, 8).setValue(params.role);
+      if (params.emailNotify !== undefined) sheet.getRange(i + 1, 9).setValue(params.emailNotify);
+      
+      return jsonResponse({ status: 'success' });
+    }
+  }
+  
+  return jsonResponse({ status: 'not_found' });
+}
+
+function checkStudentId(studentId) {
+  const sheet = getSheet('Users');
+  const data = sheet.getDataRange().getValues();
+  
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][3] === studentId) {
+      return jsonResponse({
+        status: 'success',
+        found: true,
+        user: {
+          uid: data[i][0],
+          name: data[i][1],
+          studentId: data[i][3]
+        }
+      });
+    }
+  }
+  
+  return jsonResponse({ status: 'success', found: false });
+}
+
+// ========================================
+// Activities Functions
+// ========================================
+function getActivities(userId) {
+  const data = getActivitiesData(userId);
+  return jsonResponse(data);
+}
+
+function getActivitiesData(userId) {
+  const sheet = getSheet('ActivityLogs');
+  const data = sheet.getDataRange().getValues();
+  const activities = [];
+  
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][1] === userId) {
+      activities.push({
+        id: data[i][0],
+        userId: data[i][1],
+        userName: data[i][2],
+        studentId: data[i][3],
+        activityName: data[i][4],
+        place: data[i][5],
+        date: data[i][6],
+        time: data[i][7],
+        hours: data[i][8],
+        personInCharge: data[i][9],
+        imageUrl: data[i][10],
+        status: data[i][11],
+        timestamp: data[i][12],
+        note: data[i][13] || ''
+      });
+    }
+  }
+  
+  return { status: 'success', activities: activities };
+}
+
+function getAllActivities() {
+  const data = getAllActivitiesData();
+  return jsonResponse(data);
+}
+
+function getAllActivitiesData() {
+  const sheet = getSheet('ActivityLogs');
+  const data = sheet.getDataRange().getValues();
+  const activities = [];
+  
+  for (let i = 1; i < data.length; i++) {
+    activities.push({
+      id: data[i][0],
+      userId: data[i][1],
+      userName: data[i][2],
+      studentId: data[i][3],
+      activityName: data[i][4],
+      place: data[i][5],
+      date: data[i][6],
+      time: data[i][7],
+      hours: data[i][8],
+      personInCharge: data[i][9],
+      imageUrl: data[i][10],
+      status: data[i][11],
+      timestamp: data[i][12],
+      note: data[i][13] || ''
+    });
+  }
+  
+  return { status: 'success', activities: activities };
+}
+
+function createActivity(params) {
+  const sheet = getSheet('ActivityLogs');
+  const id = 'ACT_' + new Date().getTime() + '_' + Math.random().toString(36).substr(2, 9);
+  
+  sheet.appendRow([
+    id,
+    params.userId,
+    params.userName,
+    params.studentId || '',
+    params.activityName,
+    params.place,
+    params.date,
+    params.time,
+    params.hours,
+    params.personInCharge,
+    params.imageUrl,
+    params.status || 'pending',
+    new Date().toISOString(),
+    params.note || ''
+  ]);
+  
+  return jsonResponse({ status: 'success', id: id });
+}
+
+function updateActivity(params) {
+  const sheet = getSheet('ActivityLogs');
+  const data = sheet.getDataRange().getValues();
+  
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] === params.id) {
+      if (params.activityName !== undefined) sheet.getRange(i + 1, 5).setValue(params.activityName);
+      if (params.place !== undefined) sheet.getRange(i + 1, 6).setValue(params.place);
+      if (params.hours !== undefined) sheet.getRange(i + 1, 9).setValue(params.hours);
+      if (params.status !== undefined) sheet.getRange(i + 1, 12).setValue(params.status);
+      if (params.note !== undefined) sheet.getRange(i + 1, 14).setValue(params.note);
+      
+      return jsonResponse({ status: 'success' });
+    }
+  }
+  
+  return jsonResponse({ status: 'not_found' });
+}
+
+function deleteActivity(id) {
+  const sheet = getSheet('ActivityLogs');
+  const data = sheet.getDataRange().getValues();
+  
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] === id) {
+      sheet.deleteRow(i + 1);
+      return jsonResponse({ status: 'success' });
+    }
+  }
+  
+  return jsonResponse({ status: 'not_found' });
+}
+
+// ========================================
+// Helper Functions
+// ========================================
+function getSheet(sheetName) {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  return ss.getSheetByName(sheetName);
+}
+
+function jsonResponse(data) {
+  return ContentService.createTextOutput(JSON.stringify(data))
+    .setMimeType(ContentService.MimeType.JSON);
+}

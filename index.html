@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบจิตอาสา - เข้าสู่ระบบ</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+</head>
+<body style="display: flex; align-items: center; min-height: 100vh;">
+
+    <div class="container" style="max-width: 450px;">
+        <div class="card" style="text-align: center; padding: 30px 20px;">
+            <h2 id="formTitle">เข้าสู่ระบบ</h2>
+            <p style="color:#7f8c8d; margin-bottom: 20px;">ระบบบันทึกกิจกรรมจิตอาสา</p>
+
+            <div id="loginForm">
+                <input type="email" id="loginEmail" placeholder="อีเมล">
+                <input type="password" id="loginPassword" placeholder="รหัสผ่าน">
+                <button onclick="login()">เข้าสู่ระบบ</button>
+                <div style="margin-top: 15px; font-size: 14px;">
+                    <a href="#" onclick="toggleForm('register')" style="color: var(--primary);">สมัครสมาชิกใหม่</a> |
+                    <a href="#" onclick="resetPassword()" style="color: #7f8c8d;">ลืมรหัสผ่าน?</a>
+                </div>
+            </div>
+
+            <div id="registerForm" class="hidden">
+                <input type="text" id="regName" placeholder="ชื่อ-นามสกุล">
+                <input type="text" id="regStudentId" placeholder="รหัสนักเรียน/นักศึกษา">
+                <input type="email" id="regEmail" placeholder="อีเมล">
+                <input type="password" id="regPassword" placeholder="รหัสผ่าน (6 ตัวขึ้นไป)">
+                <button onclick="register()">ลงทะเบียน</button>
+                <div style="margin-top: 15px; font-size: 14px;">
+                    <a href="#" onclick="toggleForm('login')" style="color: var(--primary);">กลับไปเข้าสู่ระบบ</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = "https://script.google.com/macros/s/AKfycbzzVff4uCKpwSofyqTBGYGn_JlV-Yt30aAsukLF29v3CsNvF3OWhbA5EHr7Bq-ldIOZ/exec";
+
+        // ตรวจสอบว่ามี session อยู่แล้วหรือไม่
+        window.onload = function() {
+            const session = getSession();
+            if (session) {
+                window.location.href = "dashboard.html";
+            }
+        };
+
+        function toggleForm(type) {
+            if (type === 'register') {
+                document.getElementById('loginForm').classList.add('hidden');
+                document.getElementById('registerForm').classList.remove('hidden');
+                document.getElementById('formTitle').innerText = "ลงทะเบียนสมาชิก";
+            } else {
+                document.getElementById('registerForm').classList.add('hidden');
+                document.getElementById('loginForm').classList.remove('hidden');
+                document.getElementById('formTitle').innerText = "เข้าสู่ระบบ";
+            }
+        }
+
+        // ฟังก์ชัน hash password ด้วย SHA-256
+        async function hashPassword(password) {
+            const encoder = new TextEncoder();
+            const data = encoder.encode(password);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+            return hashHex;
+        }
+
+        async function login() {
+            const email = document.getElementById('loginEmail').value.trim();
+            const password = document.getElementById('loginPassword').value;
+
+            if (!email || !password) {
+                return Swal.fire('ข้อมูลไม่ครบ', 'กรุณากรอกอีเมลและรหัสผ่าน', 'warning');
+            }
+
+            const btn = document.querySelector('#loginForm button');
+            const oldText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = "กำลังเข้าสู่ระบบ...";
+
+            try {
+                const passwordHash = await hashPassword(password);
+                
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        action: 'login',
+                        email: email,
+                        passwordHash: passwordHash
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.status === 'success') {
+                    // บันทึก session
+                    saveSession(result.user);
+                    Swal.fire('สำเร็จ!', 'เข้าสู่ระบบแล้ว', 'success').then(() => {
+                        window.location.href = "dashboard.html";
+                    });
+                } else {
+                    Swal.fire('เข้าสู่ระบบไม่สำเร็จ', result.message || 'อีเมลหรือรหัสผ่านไม่ถูกต้อง', 'error');
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                Swal.fire('เกิดข้อผิดพลาด', 'ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = oldText;
+            }
+        }
+
+        async function register() {
+            const name = document.getElementById('regName').value.trim();
+            const studentId = document.getElementById('regStudentId').value.trim();
+            const email = document.getElementById('regEmail').value.trim();
+            const password = document.getElementById('regPassword').value;
+
+            if (!name || !studentId || !email || !password) {
+                return Swal.fire('ข้อมูลไม่ครบ', 'กรุณากรอกให้ครบทุกช่อง', 'warning');
+            }
+
+            if (password.length < 6) {
+                return Swal.fire('รหัสผ่านสั้นเกินไป', 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร', 'warning');
+            }
+
+            const btn = document.querySelector('#registerForm button');
+            const oldText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = "กำลังสมัครสมาชิก...";
+
+            try {
+                const passwordHash = await hashPassword(password);
+
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        action: 'register',
+                        name: name,
+                        email: email,
+                        studentId: studentId,
+                        passwordHash: passwordHash,
+                        role: 'user'
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.status === 'success') {
+                    // บันทึก session
+                    saveSession(result.user);
+                    Swal.fire('สำเร็จ!', 'ลงทะเบียนเรียบร้อย กำลังเข้าสู่ระบบ...', 'success').then(() => {
+                        window.location.href = "dashboard.html";
+                    });
+                } else {
+                    Swal.fire('ลงทะเบียนไม่สำเร็จ', result.message || 'เกิดข้อผิดพลาด', 'error');
+                }
+            } catch (error) {
+                console.error('Register error:', error);
+                Swal.fire('เกิดข้อผิดพลาด', 'ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = oldText;
+            }
+        }
+
+        async function resetPassword() {
+            const { value: email } = await Swal.fire({
+                title: 'ลืมรหัสผ่าน',
+                input: 'email',
+                inputLabel: 'กรอกอีเมลของคุณ',
+                inputPlaceholder: 'อีเมล',
+                showCancelButton: true,
+                confirmButtonText: 'ส่งคำขอ',
+                cancelButtonText: 'ยกเลิก'
+            });
+
+            if (email) {
+                Swal.fire({
+                    icon: 'info',
+                    title: 'ติดต่อผู้ดูแลระบบ',
+                    html: `กรุณาติดต่อผู้ดูแลระบบเพื่อขอรีเซ็ตรหัสผ่าน<br>อีเมล: <strong>${email}</strong><br><br>โทร: 064-9019989<br>หรืออีเมล: support@volunteer.com`
+                });
+            }
+        }
+
+        // ฟังก์ชันจัดการ Session
+        function saveSession(user) {
+            const session = {
+                user: user,
+                timestamp: new Date().getTime()
+            };
+            localStorage.setItem('volunteerSession', JSON.stringify(session));
+        }
+
+        function getSession() {
+            const sessionStr = localStorage.getItem('volunteerSession');
+            if (!sessionStr) return null;
+
+            try {
+                const session = JSON.parse(sessionStr);
+                // ตรวจสอบว่า session หมดอายุหรือไม่ (24 ชั่วโมง)
+                const now = new Date().getTime();
+                const sessionAge = now - session.timestamp;
+                const maxAge = 24 * 60 * 60 * 1000; // 24 hours
+
+                if (sessionAge > maxAge) {
+                    localStorage.removeItem('volunteerSession');
+                    return null;
+                }
+
+                return session;
+            } catch (e) {
+                localStorage.removeItem('volunteerSession');
+                return null;
+            }
+        }
+    </script>
+</body>
+</html>

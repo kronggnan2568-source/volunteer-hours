@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบจัดการผู้ดูแลระบบ (Admin)</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .btn-action { margin-bottom: 0; }
+        .btn-approve { background-color: #2ecc71; color: white; }
+        .btn-edit { background-color: #f39c12; color: white; }
+        .btn-reject { background-color: #e74c3c; color: white; }
+        .btn-delete { background-color: #95a5a6; color: white; }
+    </style>
+</head>
+<body>
+
+<div class="container" style="max-width: 1200px;">
+    
+    <div class="admin-header">
+        <div>
+            <h2>Admin Management</h2>
+            <p style="color:#7f8c8d; margin:0;">จัดการข้อมูลกิจกรรมทั้งหมด</p>
+        </div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <button onclick="manualAdd()" style="background:#3498db; width:auto;">
+                <i class="fas fa-plus-circle"></i> เพิ่มกิจกรรมให้ นร.
+            </button>
+            <button onclick="location.href='dashboard.html'" class="secondary" style="width:auto;">
+                <i class="fas fa-home"></i> กลับหน้าหลัก
+            </button>
+        </div>
+    </div>
+
+    <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; margin-bottom:15px;">
+            <h3>📋 รายการกิจกรรม (Activity Logs)</h3>
+            <div class="filter-group">
+                <button class="filter-btn active" onclick="setFilter('all', this)">ทั้งหมด</button>
+                <button class="filter-btn" onclick="setFilter('pending', this)">⏳ รอยืนยัน</button>
+                <button class="filter-btn" onclick="setFilter('approved', this)">✅ อนุมัติแล้ว</button>
+                <button class="filter-btn" onclick="setFilter('rejected', this)">❌ ปฏิเสธ</button>
+            </div>
+        </div>
+
+        <table id="adminTable">
+            <thead>
+                <tr>
+                    <th width="20%">ผู้ขอ / รหัส</th>
+                    <th width="20%">กิจกรรม</th>
+                    <th width="15%">สถานที่</th>
+                    <th width="5%">ชม.</th>
+                    <th width="10%">หลักฐาน</th>
+                    <th width="10%">สถานะ</th>
+                    <th width="20%">จัดการ</th>
+                </tr>
+            </thead>
+            <tbody id="adminTableBody">
+                <tr><td colspan="7" class="text-center">กำลังโหลดข้อมูล...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    const API_URL = "https://script.google.com/macros/s/AKfycbzzVff4uCKpwSofyqTBGYGn_JlV-Yt30aAsukLF29v3CsNvF3OWhbA5EHr7Bq-ldIOZ/exec";
+
+    let allLogs = [];
+    let currentFilter = 'all';
+    let currentUser = null;
+    let userData = null;
+
+    // ตรวจสอบ session และสิทธิ์ admin
+    window.onload = function() {
+        const session = getSession();
+        if (!session) {
+            window.location.href = "index.html";
+            return;
+        }
+        currentUser = session.user;
+        checkAdminRole(currentUser.uid);
+    };
+
+    function getSession() {
+        const sessionStr = localStorage.getItem('volunteerSession');
+        if (!sessionStr) return null;
+
+        try {
+            const session = JSON.parse(sessionStr);
+            const now = new Date().getTime();
+            const sessionAge = now - session.timestamp;
+            const maxAge = 24 * 60 * 60 * 1000;
+
+            if (sessionAge > maxAge) {
+                localStorage.removeItem('volunteerSession');
+                return null;
+            }
+
+            return session;
+        } catch (e) {
+            localStorage.removeItem('volunteerSession');
+            return null;
+        }
+    }
+
+    function saveSession(user) {
+        const session = {
+            user: user,
+            timestamp: new Date().getTime()
+        };
+        localStorage.setItem('volunteerSession', JSON.stringify(session));
+    }
+
+    async function checkAdminRole(uid) {
+        try {
+            const response = await fetch(`${API_URL}?action=getUser&uid=${uid}`);
+            const result = await response.json();
+            
+            if (result.status === 'success' && result.user.role === 'admin') {
+                userData = result.user;
+                loadAllLogs();
+            } else {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'ไม่ใช่ Admin',
+                    text: 'ตั้งค่าบัญชีนี้เป็น Admin?',
+                    showCancelButton: true,
+                    confirmButtonText: 'ใช่'
+                }).then(async (r) => {
+                    if (r.isConfirmed) {
+                        await fetch(API_URL, {
+                            method: 'POST',
+                            body: JSON.stringify({
+                                action: 'updateUser',
+                                uid: uid,
+                                role: 'admin'
+                            })
+                        });
+                        location.reload();
+                    } else {
+                        window.location.href = "dashboard.html";
+                    }
+                });
+            }
+        } catch (error) {
+            console.error('Error checking admin role:', error);
+            Swal.fire('เกิดข้อผิดพลาด', 'ไม่สามารถตรวจสอบสิทธิ์ได้', 'error');
+        }
+    }
+
+    async function loadAllLogs() {
+        try {
+            const response = await fetch(`${API_URL}?action=getAllActivities`);
+            const result = await response.json();
+            
+            if (result.status === 'success') {
+                allLogs = result.activities;
+                allLogs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+                renderTable();
+            }
+            
+            setTimeout(loadAllLogs, 10000);
+        } catch (error) {
+            console.error('Error loading logs:', error);
+            document.getElementById('adminTableBody').innerHTML = 
+                "<tr><td colspan='7' class='text-center' style='color:red;'>เกิดข้อผิดพลาดในการโหลดข้อมูล</td></tr>";
+        }
+    }
+
+    function renderTable() {
+        const tbody = document.getElementById('adminTableBody');
+        tbody.innerHTML = "";
+        
+        const filteredLogs = allLogs.filter(log => 
+            currentFilter === 'all' ? true : log.status === currentFilter
+        );
+
+        if (filteredLogs.length === 0) {
+            tbody.innerHTML = "<tr><td colspan='7' class='text-center' style='padding:30px; color:#aaa;'>🔭 ไม่พบรายการ</td></tr>";
+            return;
+        }
+
+        filteredLogs.forEach(d => {
+            const studentInfo = d.studentId ? `รหัส: ${d.studentId}` : `ID: ${d.userId.substring(0,5)}..`;
+            const dateStr = d.date || '-';
+            
+            let statusBadge = d.status === 'approved' ? '<span class="status-badge badge-approved">อนุมัติแล้ว</span>' :
+                              d.status === 'rejected' ? '<span class="status-badge badge-rejected">ปฏิเสธ</span>' :
+                              '<span class="status-badge badge-pending">รอตรวจสอบ</span>';
+            
+            let rowStyle = d.status === 'pending' ? 'background-color: #fffbf2;' : 
+                          (d.status === 'rejected' ? 'opacity:0.7;' : '');
+
+            tbody.innerHTML += `
+                <tr style="${rowStyle}">
+                    <td data-label="ผู้ขอ/รหัส">
+                        <strong>${d.userName || 'ไม่ระบุชื่อ'}</strong><br>
+                        <small class="text-muted">${studentInfo}</small><br>
+                        <small style="color:#999">${dateStr}</small>
+                    </td>
+                    <td data-label="กิจกรรม">${d.activityName || '-'}</td>
+                    <td data-label="สถานที่">${d.place || '-'}</td>
+                    <td data-label="ชม." style="font-weight:bold; color:#2980b9;">${d.hours}</td>
+                    <td data-label="หลักฐาน">
+                        ${d.imageUrl ? `<a href="${d.imageUrl}" target="_blank" style="text-decoration:none;"><i class="fas fa-image"></i> ดูรูป</a>` : '-'}
+                    </td>
+                    <td data-label="สถานะ">${statusBadge}</td>
+                    <td data-label="จัดการ">
+                        <div class="btn-group">
+                            ${d.status !== 'approved' ? 
+                                `<button class="btn-action btn-approve" onclick="approve('${d.id}', '${d.userId}', ${d.hours})"><i class="fas fa-check"></i></button>` : ''}
+                            <button class="btn-action btn-edit" onclick="editLog('${d.id}', '${escapeHtml(d.activityName)}', '${escapeHtml(d.place)}', ${d.hours})"><i class="fas fa-edit"></i></button>
+                            <button class="btn-action btn-reject" onclick="reject('${d.id}')"><i class="fas fa-times"></i></button>
+                            <button class="btn-action btn-delete" onclick="deleteLog('${d.id}')"><i class="fas fa-trash"></i></button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        });
+    }
+
+    function escapeHtml(text) {
+        if (!text) return '';
+        return text.replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+    }
+
+    function setFilter(filterType, btnElement) {
+        currentFilter = filterType;
+        document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
+        btnElement.classList.add('active');
+        renderTable();
+    }
+
+    async function approve(logId, userId, hours) {
+        const result = await Swal.fire({
+            title: 'ยืนยันอนุมัติ?',
+            text: `ให้ชั่วโมง ${hours} ชม.`,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#2ecc71',
+            confirmButtonText: 'อนุมัติ'
+        });
+        
+        if (result.isConfirmed) {
+            try {
+                await fetch(API_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        action: 'updateActivity',
+                        id: logId,
+                        status: 'approved'
+                    })
+                });
+                
+                const userRes = await fetch(`${API_URL}?action=getUser&uid=${userId}`);
+                const userResult = await userRes.json();
+                
+                if (userResult.status === 'success') {
+                    const currentApproved = userResult.user.approvedHours || 0;
+                    const currentTotal = userResult.user.totalHours || 0;
+                    
+                    await fetch(API_URL, {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            action: 'updateUser',
+                            uid: userId,
+                            approvedHours: currentApproved + parseFloat(hours),
+                            totalHours: currentTotal
+                        })
+                    });
+                }
+                
+                Swal.fire({
+                    icon: 'success',
+                    title: 'อนุมัติสำเร็จ',
+                    timer: 1500,
+                    showConfirmButton: false
+                });
+                
+                loadAllLogs();
+            } catch (error) {
+                Swal.fire('เกิดข้อผิดพลาด', error.message, 'error');
+            }
+        }
+    }
+
+    async function editLog(logId, oldName, oldPlace, oldHours) {
+        const result = await Swal.fire({
+            title: 'แก้ไขข้อมูล',
+            html: `
+                <input id="swal-name" class="swal2-input" value="${oldName}" placeholder="ชื่อกิจกรรม">
+                <input id="swal-place" class="swal2-input" value="${oldPlace}" placeholder="สถานที่">
+                <input id="swal-hours" type="number" class="swal2-input" value="${oldHours}" placeholder="ชั่วโมง">
+            `,
+            showCancelButton: true,
+            confirmButtonText: 'บันทึก',
+            preConfirm: () => ({
+                activityName: document.getElementById('swal-name').value,
+                place: document.getElementById('swal-place').value,
+                hours: parseFloat(document.getElementById('swal-hours').value)
+            })
+        });
+        
+        if (result.isConfirmed) {
+            try {
+                await fetch(API_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        action: 'updateActivity',
+                        id: logId,
+                        ...result.value
+                    })
+                });
+                
+                Swal.fire('เรียบร้อย', 'แก้ไขข้อมูลแล้ว', 'success');
+                loadAllLogs();
+            } catch (error) {
+                Swal.fire('เกิดข้อผิดพลาด', error.message, 'error');
+            }
+        }
+    }
+
+    async function reject(logId) {
+        const result = await Swal.fire({
+            title: 'ปฏิเสธกิจกรรม',
+            input: 'text',
+            inputPlaceholder: 'ระบุเหตุผล...',
+            showCancelButton: true,
+            confirmButtonColor: '#e74c3c',
+            confirmButtonText: 'ยืนยัน'
+        });
+        
+        if (result.isConfirmed) {
+            try {
+                await fetch(API_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        action: 'updateActivity',
+                        id: logId,
+                        status: 'rejected',
+                        note: result.value || ''
+                    })
+                });
+                
+                Swal.fire('เรียบร้อย', 'ปฏิเสธกิจกรรมแล้ว', 'success');
+                loadAllLogs();
+            } catch (error) {
+                Swal.fire('เกิดข้อผิดพลาด', error.message, 'error');
+            }
+        }
+    }
+
+    async function deleteLog(logId) {
+        const result = await Swal.fire({
+            title: 'ลบรายการนี้?',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#95a5a6',
+            confirmButtonText: 'ลบ'
+        });
+        
+        if (result.isConfirmed) {
+            try {
+                await fetch(API_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        action: 'deleteActivity',
+                        id: logId
+                    })
+                });
+                
+                Swal.fire('ลบแล้ว', 'ลบรายการสำเร็จ', 'success');
+                loadAllLogs();
+            } catch (error) {
+                Swal.fire('เกิดข้อผิดพลาด', error.message, 'error');
+            }
+        }
+    }
+
+    async function manualAdd() {
+        const { value: studentId } = await Swal.fire({
+            title: 'เพิ่มกิจกรรม',
+            input: 'text',
+            inputLabel: 'รหัสนักเรียน',
+            showCancelButton: true
+        });
+        
+        if (!studentId) return;
+        
+        try {
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                body: JSON.stringify({
+                    action: 'checkStudentId',
+                    studentId: studentId
+                })
+            });
+            const result = await response.json();
+            
+            if (!result.found) {
+                return Swal.fire('ไม่พบผู้ใช้', 'ไม่พบรหัสนักเรียนนี้', 'error');
+            }
+
+            const targetUser = result.user;
+
+            const { value: f } = await Swal.fire({
+                title: `เพิ่มให้: ${targetUser.name}`,
+                html: `
+                    <input id="m-name" class="swal2-input" placeholder="ชื่อกิจกรรม">
+                    <input id="m-place" class="swal2-input" placeholder="สถานที่">
+                    <input id="m-hours" type="number" class="swal2-input" placeholder="ชม.">
+                    <input id="m-date" type="date" class="swal2-input">
+                `,
+                showCancelButton: true,
+                preConfirm: () => ({
+                    activityName: document.getElementById('m-name').value,
+                    place: document.getElementById('m-place').value,
+                    hours: parseFloat(document.getElementById('m-hours').value),
+                    date: document.getElementById('m-date').value
+                })
+            });
+
+            if (f && f.activityName && f.hours) {
+                await fetch(API_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        action: 'createActivity',
+                        userId: targetUser.uid,
+                        userName: targetUser.name,
+                        studentId: targetUser.studentId,
+                        activityName: f.activityName,
+                        place: f.place,
+                        hours: f.hours,
+                        date: f.date,
+                        time: '00:00',
+                        personInCharge: 'Admin Added',
+                        imageUrl: '',
+                        status: 'approved'
+                    })
+                });
+                
+                const userRes = await fetch(`${API_URL}?action=getUser&uid=${targetUser.uid}`);
+                const userResult = await userRes.json();
+                
+                if (userResult.status === 'success') {
+                    const currentApproved = userResult.user.approvedHours || 0;
+                    const currentTotal = userResult.user.totalHours || 0;
+                    
+                    await fetch(API_URL, {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            action: 'updateUser',
+                            uid: targetUser.uid,
+                            approvedHours: currentApproved + f.hours,
+                            totalHours: currentTotal + f.hours
+                        })
+                    });
+                }
+                
+                Swal.fire('สำเร็จ', 'เพิ่มข้อมูลเรียบร้อย', 'success');
+                loadAllLogs();
+            }
+        } catch (error) {
+            Swal.fire('เกิดข้อผิดพลาด', error.message, 'error');
+        }
+    }
+</script>
+</body>
+</html>
