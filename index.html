@@ -38,9 +38,10 @@
     </div>
 
     <script>
-        const API_URL = "https://script.google.com/macros/s/AKfycbwo957Zbpom3vrp_fNY5sj9-mDBvsroDN80vuZRvRsdEa_ahF_Zw0cTX55mZOXTi48a/exec";
+        // *** สำคัญ: ตรวจสอบ URL นี้ให้ถูกต้องตามที่คุณ Deploy ล่าสุด ***
+        const API_URL = "https://script.google.com/macros/s/AKfycbwDYB9-YNqmcRyBPVi3twtY-lTD-V0kPOjSD0AsVjwljno6h8PuIrNSLvqd1PeVR23V/exec";
 
-        // ตรวจสอบว่ามี session อยู่แล้วหรือไม่
+        // ตรวจสอบ Session
         window.onload = function() {
             const session = getSession();
             if (session) {
@@ -60,14 +61,13 @@
             }
         }
 
-        // ฟังก์ชัน hash password ด้วย SHA-256
+        // ฟังก์ชัน hash password
         async function hashPassword(password) {
             const encoder = new TextEncoder();
             const data = encoder.encode(password);
             const hashBuffer = await crypto.subtle.digest('SHA-256', data);
             const hashArray = Array.from(new Uint8Array(hashBuffer));
-            const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-            return hashHex;
+            return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
         }
 
         async function login() {
@@ -98,7 +98,6 @@
                 const result = await response.json();
 
                 if (result.status === 'success') {
-                    // บันทึก session
                     saveSession(result.user);
                     Swal.fire('สำเร็จ!', 'เข้าสู่ระบบแล้ว', 'success').then(() => {
                         window.location.href = "dashboard.html";
@@ -152,7 +151,6 @@
                 const result = await response.json();
 
                 if (result.status === 'success') {
-                    // บันทึก session
                     saveSession(result.user);
                     Swal.fire('สำเร็จ!', 'ลงทะเบียนเรียบร้อย กำลังเข้าสู่ระบบ...', 'success').then(() => {
                         window.location.href = "dashboard.html";
@@ -169,51 +167,84 @@
             }
         }
 
+        // --- ฟังก์ชันรีเซ็ตรหัสผ่าน (แก้ไขใหม่) ---
         async function resetPassword() {
-            const { value: email } = await Swal.fire({
-                title: 'ลืมรหัสผ่าน',
-                input: 'email',
-                inputLabel: 'กรอกอีเมลของคุณ',
-                inputPlaceholder: 'อีเมล',
+            const { value: formValues } = await Swal.fire({
+                title: 'ตั้งค่ารหัสผ่านใหม่',
+                html:
+                    '<input id="swal-input-email" class="swal2-input" placeholder="ระบุอีเมล">' +
+                    '<input id="swal-input-pass" type="password" class="swal2-input" placeholder="รหัสผ่านใหม่">',
+                focusConfirm: false,
                 showCancelButton: true,
-                confirmButtonText: 'ส่งคำขอ',
-                cancelButtonText: 'ยกเลิก'
+                confirmButtonText: 'เปลี่ยนรหัสผ่าน',
+                cancelButtonText: 'ยกเลิก',
+                preConfirm: () => {
+                    return [
+                        document.getElementById('swal-input-email').value,
+                        document.getElementById('swal-input-pass').value
+                    ]
+                }
             });
 
-            if (email) {
+            if (formValues) {
+                const [email, newPassword] = formValues;
+
+                if (!email || !newPassword) {
+                    return Swal.fire('ข้อมูลไม่ครบ', 'กรุณากรอกอีเมลและรหัสผ่านใหม่', 'warning');
+                }
+                if (newPassword.length < 6) {
+                    return Swal.fire('รหัสผ่านสั้นเกินไป', 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร', 'warning');
+                }
+
                 Swal.fire({
-                    icon: 'info',
-                    title: 'ติดต่อผู้ดูแลระบบ',
-                    html: `กรุณาติดต่อผู้ดูแลระบบเพื่อขอรีเซ็ตรหัสผ่าน<br>อีเมล: <strong>${email}</strong><br><br>โทร: 064-9019989<br>หรืออีเมล: support@volunteer.com`
+                    title: 'กำลังดำเนินการ...',
+                    allowOutsideClick: false,
+                    didOpen: () => Swal.showLoading()
                 });
+
+                try {
+                    const passwordHash = await hashPassword(newPassword);
+
+                    const response = await fetch(API_URL, {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            action: 'resetPassword',
+                            email: email,
+                            passwordHash: passwordHash
+                        })
+                    });
+
+                    const result = await response.json();
+
+                    if (result.status === 'success') {
+                        Swal.fire('สำเร็จ', 'เปลี่ยนรหัสผ่านเรียบร้อยแล้ว<br>กรุณาเข้าสู่ระบบด้วยรหัสใหม่', 'success');
+                    } else {
+                        Swal.fire('ไม่สำเร็จ', result.message || 'ไม่พบอีเมลนี้ในระบบ', 'error');
+                    }
+
+                } catch (error) {
+                    console.error('Reset password error:', error);
+                    Swal.fire('เกิดข้อผิดพลาด', 'ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์', 'error');
+                }
             }
         }
 
-        // ฟังก์ชันจัดการ Session
+        // จัดการ Session
         function saveSession(user) {
-            const session = {
-                user: user,
-                timestamp: new Date().getTime()
-            };
+            const session = { user: user, timestamp: new Date().getTime() };
             localStorage.setItem('volunteerSession', JSON.stringify(session));
         }
 
         function getSession() {
             const sessionStr = localStorage.getItem('volunteerSession');
             if (!sessionStr) return null;
-
             try {
                 const session = JSON.parse(sessionStr);
-                // ตรวจสอบว่า session หมดอายุหรือไม่ (24 ชั่วโมง)
                 const now = new Date().getTime();
-                const sessionAge = now - session.timestamp;
-                const maxAge = 24 * 60 * 60 * 1000; // 24 hours
-
-                if (sessionAge > maxAge) {
+                if (now - session.timestamp > 24 * 60 * 60 * 1000) {
                     localStorage.removeItem('volunteerSession');
                     return null;
                 }
-
                 return session;
             } catch (e) {
                 localStorage.removeItem('volunteerSession');
