@@ -23,6 +23,7 @@
         body { font-family: 'Sarabun', sans-serif; background: var(--bg); margin: 0; padding: 20px; color: var(--text-body); }
         .container { max-width: 1200px; margin: 0 auto; }
 
+        /* Header */
         .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px; }
         .title-group h2 { margin: 0; color: #0f172a; font-size: 24px; }
         .status-badge { display: inline-flex; align-items: center; font-size: 12px; padding: 4px 10px; border-radius: 20px; background: #e2e8f0; color: #64748b; margin-top: 5px; }
@@ -30,27 +31,46 @@
         .dot.active { background: #22c55e; box-shadow: 0 0 8px #22c55e; }
         .dot.cache { background: #f59e0b; box-shadow: 0 0 8px #f59e0b; }
 
+        /* Card Design */
         .card { background: white; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); overflow: hidden; border: 1px solid #e2e8f0; }
 
+        /* --- Beautiful Bordered Table --- */
         .table-container { overflow-x: auto; }
         table { width: 100%; border-collapse: collapse; min-width: 800px; }
         
         thead { background: #f8fafc; }
-        th { padding: 16px; text-align: left; font-weight: 600; color: var(--text-head); border: 1px solid var(--border-color); white-space: nowrap; }
-        td { padding: 14px 16px; border: 1px solid var(--border-color); vertical-align: middle; }
+        th { 
+            padding: 16px; 
+            text-align: left; 
+            font-weight: 600; 
+            color: var(--text-head); 
+            border: 1px solid var(--border-color);
+            white-space: nowrap;
+        }
+        
+        td { 
+            padding: 14px 16px; 
+            border: 1px solid var(--border-color);
+            vertical-align: middle;
+            white-space: nowrap; /* 🔥 บังคับไม่ให้ตัดบรรทัด 🔥 */
+        }
+
         tr:hover td { background-color: #f1f5f9; cursor: default; }
 
+        /* Badges */
         .badge { padding: 4px 12px; border-radius: 6px; font-size: 13px; font-weight: 600; text-transform: capitalize; }
         .badge.approved { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
         .badge.rejected { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
         .badge.pending { background: #fef9c3; color: #854d0e; border: 1px solid #fde047; }
 
+        /* Buttons */
         .btn { padding: 8px 16px; border-radius: 6px; border: none; cursor: pointer; font-weight: 500; transition: 0.2s; font-family: 'Sarabun'; display: inline-flex; align-items: center; gap: 6px; }
         .btn:active { transform: scale(0.96); }
         .btn-primary { background: var(--primary); color: white; box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2); }
         .btn-secondary { background: white; border: 1px solid var(--border-color); color: var(--text-body); }
         .btn:disabled { opacity: 0.7; cursor: not-allowed; }
 
+        /* Action Buttons */
         .action-btn { width: 32px; height: 32px; border-radius: 6px; border: none; display: inline-flex; align-items: center; justify-content: center; margin: 0 2px; cursor: pointer; color: white; transition: 0.2s; }
         .action-btn:hover { opacity: 0.9; transform: translateY(-1px); }
         .btn-check { background: #22c55e; }
@@ -58,9 +78,11 @@
         .btn-cross { background: #ef4444; }
         .btn-trash { background: #64748b; }
 
+        /* Loading Overlay */
         #loader { position: fixed; top: 0; left: 0; width: 100%; height: 3px; background: transparent; z-index: 9999; }
         #loader .bar { width: 0%; height: 100%; background: var(--primary); transition: width 0.3s; }
 
+        /* Mobile Responsive */
         @media (max-width: 768px) {
             thead { display: none; }
             tr, td { display: block; border: none; }
@@ -98,12 +120,12 @@
                 <thead>
                     <tr>
                         <th width="20%">ชื่อ / รหัส</th>
-                        <th width="20%">กิจกรรม</th>
+                        <th width="25%">กิจกรรม</th>
                         <th width="15%">สถานที่</th>
-                        <th width="10%">ชม.</th>
+                        <th width="8%">ชม.</th>
                         <th width="10%">หลักฐาน</th>
                         <th width="10%">สถานะ</th>
-                        <th width="15%">จัดการ</th>
+                        <th width="12%">จัดการ</th>
                     </tr>
                 </thead>
                 <tbody id="tableBody">
@@ -127,13 +149,13 @@
     window.onload = function() {
         if(!localStorage.getItem('volunteerSession')) window.location.href = 'index.html';
 
-        // 1. Instant Cache Load (เร็วสุด 0.01 วิ)
+        // 1. Instant Cache Load
         loadFromCache();
 
-        // 2. Network Load (ตามมาทีหลัง)
+        // 2. Network Load
         forceRefresh(true);
 
-        // 3. Auto Sync ทุก 4 วิ
+        // 3. Auto Sync
         setInterval(() => loadAPI(true), 4000);
     };
 
@@ -150,7 +172,6 @@
         localStorage.setItem('adminData', JSON.stringify(data));
     }
 
-    // --- DATA LOADING STRATEGY ---
     async function forceRefresh(silent = false) {
         const btn = document.getElementById('btnRefresh');
         const icon = document.getElementById('iconRefresh');
@@ -160,8 +181,6 @@
             btn.disabled = true;
         }
 
-        // RACE: ใครเสร็จก่อน ชนะ! (CSV vs API)
-        // CSV ปกติจะเร็วกว่ามาก (0.3-0.8 วิ) API อาจจะ 1-2 วิ
         const pCSV = new Promise(resolve => {
             Papa.parse(CSV_URL + "&t=" + Date.now(), { 
                 download: true, header: true, skipEmptyLines: true,
@@ -177,7 +196,6 @@
             .then(d => d.status === 'success' ? {src:'api', data:d.activities} : null)
             .catch(() => null);
 
-        // รอตัวที่เร็วที่สุด
         const winner = await Promise.race([pCSV, pAPI]);
 
         if (winner) {
@@ -185,13 +203,11 @@
             if(!silent) showToast();
         }
 
-        // คืนค่าปุ่มทันทีที่ตัวแรกเสร็จ
         if(!silent) {
             icon.classList.remove('fa-spin');
             btn.disabled = false;
         }
 
-        // รอตัวที่ช้ากว่าให้จบ process (Background Update)
         Promise.all([pCSV, pAPI]).then(results => {
             results.forEach(res => { if(res) processData(res.data); });
         });
@@ -223,7 +239,6 @@
             ts: r.timestamp || ''
         })).filter(x => x.id);
 
-        // Optimization: ถ้าข้อมูลเหมือนเดิม 100% ไม่ต้อง Render ใหม่ (ลดการกระพริบ)
         if(JSON.stringify(mapped) === JSON.stringify(allLogs)) {
             updateStatus('Live Sync Active', 'active');
             return;
@@ -232,7 +247,7 @@
         allLogs = mapped;
         allLogs.sort((a,b) => new Date(b.ts || b.date) - new Date(a.ts || a.date));
         
-        saveToCache(allLogs); // Save Cache ทันทีที่ได้ข้อมูลใหม่
+        saveToCache(allLogs);
         renderTable();
         updateStatus('Live Sync Active', 'active');
     }
@@ -247,6 +262,7 @@
             const badgeText = d.status === 'approved' ? 'อนุมัติแล้ว' : (d.status === 'rejected' ? 'ปฏิเสธ' : 'รอตรวจสอบ');
             const bgRow = d.status === 'pending' ? 'background:#fffbeb;' : '';
 
+            // ใช้ div ครอบ activity และ place เพื่อจำกัดความกว้างและตัดคำด้วย ... (Ellipsis)
             html += `
             <tr style="${bgRow}">
                 <td data-label="ชื่อ">
@@ -254,8 +270,16 @@
                     <div style="font-size:12px; color:#64748b;">${d.studentId || '-'}</div>
                     <div style="font-size:12px; color:#94a3b8;">${d.date}</div>
                 </td>
-                <td data-label="กิจกรรม">${d.activity}</td>
-                <td data-label="สถานที่">${d.place}</td>
+                <td data-label="กิจกรรม">
+                    <div style="max-width: 250px; overflow: hidden; text-overflow: ellipsis;" title="${d.activity}">
+                        ${d.activity}
+                    </div>
+                </td>
+                <td data-label="สถานที่">
+                    <div style="max-width: 150px; overflow: hidden; text-overflow: ellipsis;" title="${d.place}">
+                        ${d.place}
+                    </div>
+                </td>
                 <td data-label="ชม." style="font-weight:bold; color:#2563eb;">${d.hours}</td>
                 <td data-label="หลักฐาน">
                     ${d.img ? `<a href="${d.img}" target="_blank" style="color:#2563eb; text-decoration:none;"><i class="fas fa-image"></i> รูปภาพ</a>` : '-'}
@@ -275,7 +299,6 @@
         tbody.innerHTML = html;
     }
 
-    // --- ACTIONS ---
     async function doAction(type, id, val1, val2) {
         let conf;
         if(type === 'approve') conf = await Swal.fire({ title: 'ยืนยันอนุมัติ?', text: `${val1} ชั่วโมง`, icon: 'question', showCancelButton: true, confirmButtonColor: '#22c55e', confirmButtonText: 'อนุมัติ' });
@@ -286,12 +309,11 @@
         }
 
         if(conf && conf.isConfirmed) {
-            // Optimistic Update: แก้ UI ทันที ไม่รอ Server
             const idx = allLogs.findIndex(x => x.id == id);
             if(idx > -1) {
                 if(type === 'delete') allLogs.splice(idx, 1);
                 else allLogs[idx].status = type === 'approve' ? 'approved' : 'rejected';
-                saveToCache(allLogs); // Save Cache ทันที
+                saveToCache(allLogs);
                 renderTable();
             }
 
@@ -338,7 +360,6 @@
         });
 
         if(f) {
-            // ส่ง Server อย่างเดียว แล้วเดี๋ยว Auto Sync จะดึงมาแสดงเอง (เพื่อความชัวร์ของ ID)
             await fetch(API_URL, { method:'POST', body:JSON.stringify({
                 action:'createActivity', userId:res.user.uid, userName:res.user.name, studentId:res.user.studentId,
                 activityName:f.activityName, place:'-', hours:parseFloat(f.hours), date:f.date, time:'00:00',
