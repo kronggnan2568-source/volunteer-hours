@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ตั้งค่า - จิตอาสา</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@200;300;400;600&display=swap" rel="stylesheet">
+
+    <style>
+        body { font-family: 'Sarabun', sans-serif; font-weight: 200; }
+        .btn-custom { border: none; padding: 8px 15px; font-size: 14px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15); transition: transform 0.2s; color: white; white-space: nowrap; height: 40px; width: auto !important; margin: 0 !important; }
+        .btn-custom:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3); filter: brightness(1.1); }
+        
+        .menu-grid button.active { background-color: #3498db; color: white; border: 2px solid #2980b9; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div class="nav-bar">
+            <h3>👋 สวัสดี, <span id="userNameDisplay">...</span></h3>
+            <button onclick="logout()" class="danger" style="width:auto; padding: 8px 15px; font-size:14px;">
+                <i class="fas fa-sign-out-alt"></i> ออก
+            </button>
+        </div>
+
+        <div id="settings">
+            <h3>⚙️ ตั้งค่าบัญชี</h3>
+            
+            <div class="card">
+                <h4>👤 ข้อมูลส่วนตัว</h4>
+                <div class="form-group">
+                    <label>ชื่อ-นามสกุล:</label>
+                    <input type="text" id="editName" placeholder="ชื่อ-นามสกุล">
+                </div>
+                <div class="form-group" style="margin-top: 10px;">
+                    <label>รหัสนักเรียน/นักศึกษา:</label>
+                    <input type="text" id="editStudentId" placeholder="รหัสนักเรียน/นักศึกษา">
+                </div>
+                <button onclick="updateProfile()" style="margin-top: 15px;">บันทึกข้อมูล</button>
+            </div>
+            
+            <div class="card">
+                <h4>📧 การแจ้งเตือน</h4>
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <input type="checkbox" id="notifyEmail" style="width:20px; height:20px; margin:0;">
+                    <label for="notifyEmail" style="margin:0; cursor:pointer;">รับอีเมลเมื่ออนุมัติ</label>
+                </div>
+                <br>
+                <button class="secondary" onclick="savePreferences()">บันทึกการตั้งค่า</button>
+            </div>
+            
+            <div class="card">
+                <h4>🔑 เปลี่ยนรหัสผ่าน</h4>
+                <input type="password" id="oldPassword" placeholder="รหัสผ่านเดิม" style="margin-bottom: 10px;">
+                <input type="password" id="newPassword" placeholder="รหัสผ่านใหม่ (6+ ตัวอักษร)">
+                <button class="danger" onclick="changePassword()">เปลี่ยนรหัสผ่าน</button>
+            </div>
+
+            <div class="card">
+                <h4>📞 ติดต่อทีมงาน/ฝ่ายสนับสนุน</h4>
+                <div style="display: flex; flex-direction: column; gap: 10px;">
+                    <a href="https://line.me/ti/p/~yourlineid" target="_blank" style="text-decoration: none;">
+                        <button class="btn-custom" style="background-color: #06C755 !important; width: 100% !important; justify-content: center; height: 45px; font-size: 16px;">
+                            <i class="fab fa-line" style="font-size: 1.3em;"></i> แอดไลน์แจ้งปัญหา
+                        </button>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = "https://script.google.com/macros/s/AKfycbwDYB9-YNqmcRyBPVi3twtY-lTD-V0kPOjSD0AsVjwljno6h8PuIrNSLvqd1PeVR23V/exec";
+        let currentUser = null;
+
+        window.onload = function () {
+            const session = getSession();
+            if (!session) { window.location.href = "index.html"; return; }
+            currentUser = session.user;
+            loadUserData();
+        };
+
+        function getSession() {
+            const sessionStr = localStorage.getItem('volunteerSession');
+            if (!sessionStr) return null;
+            try {
+                const session = JSON.parse(sessionStr);
+                const now = new Date().getTime();
+                if ((now - session.timestamp) > (24 * 60 * 60 * 1000)) return null;
+                return session;
+            } catch (e) { return null; }
+        }
+
+        function saveSession(user) {
+            localStorage.setItem('volunteerSession', JSON.stringify({ user: user, timestamp: new Date().getTime() }));
+        }
+
+        async function hashPassword(password) {
+            const encoder = new TextEncoder();
+            const data = encoder.encode(password);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+            return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        async function loadUserData() {
+            try {
+                // โหลดเบื้องต้นจาก session
+                document.getElementById('userNameDisplay').innerText = currentUser.name || "ผู้ใช้";
+                document.getElementById('editName').value = currentUser.name || "";
+                document.getElementById('editStudentId').value = (currentUser.studentId !== null && currentUser.studentId !== undefined) ? currentUser.studentId : "";
+
+                // ดึงข้อมูลล่าสุดจาก API
+                const response = await fetch(`${API_URL}?action=getUser&uid=${currentUser.uid}`);
+                const result = await response.json();
+                if (result.status === 'success') {
+                    const userData = result.user;
+                    currentUser = result.user;
+                    saveSession(result.user);
+
+                    document.getElementById('userNameDisplay').innerText = userData.name || "ผู้ใช้";
+                    document.getElementById('editName').value = userData.name || "";
+                    document.getElementById('editStudentId').value = (userData.studentId !== null && userData.studentId !== undefined) ? userData.studentId : "";
+                    document.getElementById('notifyEmail').checked = userData.emailNotify !== false;
+                }
+            } catch (error) { console.error(error); }
+        }
+
+        async function updateProfile() {
+            const name = document.getElementById('editName').value.trim();
+            const studentId = document.getElementById('editStudentId').value.trim();
+
+            if (!name) return Swal.fire('ข้อมูลไม่ครบ', 'กรุณาระบุชื่อ-นามสกุล', 'warning');
+
+            try {
+                const res = await fetch(API_URL, { 
+                    method: 'POST', 
+                    body: JSON.stringify({ action: 'updateUser', uid: currentUser.uid, name: name, studentId: studentId }) 
+                });
+                if ((await res.json()).status === 'success') {
+                    Swal.fire('สำเร็จ', 'บันทึกข้อมูลส่วนตัวเรียบร้อยแล้ว', 'success');
+                    currentUser.name = name;
+                    currentUser.studentId = studentId;
+                    saveSession(currentUser);
+                    document.getElementById('userNameDisplay').innerText = name;
+                }
+            } catch (e) { Swal.fire('Error', e.message, 'error'); }
+        }
+
+        async function savePreferences() {
+            const emailNotify = document.getElementById('notifyEmail').checked;
+            try {
+                const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'updateUser', uid: currentUser.uid, emailNotify: emailNotify }) });
+                if ((await res.json()).status === 'success') Swal.fire('สำเร็จ', 'บันทึกการตั้งค่าแล้ว', 'success');
+            } catch (e) { Swal.fire('Error', e.message, 'error'); }
+        }
+
+        async function changePassword() {
+            const oldPass = document.getElementById('oldPassword').value;
+            const newPass = document.getElementById('newPassword').value;
+            if (!oldPass || !newPass || newPass.length < 6) return Swal.fire('ข้อมูลไม่ถูกต้อง', 'กรุณากรอกข้อมูลให้ครบ', 'warning');
+
+            try {
+                const oldPassHash = await hashPassword(oldPass);
+                const newPassHash = await hashPassword(newPass);
+                const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'changePassword', uid: currentUser.uid, oldPasswordHash: oldPassHash, newPasswordHash: newPassHash }) });
+                if ((await res.json()).status === 'success') {
+                    Swal.fire('สำเร็จ', 'เปลี่ยนรหัสผ่านแล้ว กรุณาเข้าสู่ระบบใหม่', 'success').then(() => logout());
+                } else {
+                    Swal.fire('ผิดพลาด', 'รหัสผ่านเดิมไม่ถูกต้อง', 'error');
+                }
+            } catch (e) { Swal.fire('Error', e.message, 'error'); }
+        }
+
+        function logout() {
+            localStorage.removeItem('volunteerSession');
+            window.location.href = "index.html";
+        }
+    </script>
+</body>
+</html>

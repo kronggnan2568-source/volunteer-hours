@@ -21,11 +21,11 @@
         }
 
         body { font-family: 'Sarabun', sans-serif; background: var(--bg); margin: 0; padding: 20px; color: var(--text-body); }
-        .container { max-width: 1200px; margin: 0 auto; }
+        .container { max-width: 100%; margin: 0 auto; padding: 0 10px; }
 
         /* Header */
         .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px; }
-        .title-group h2 { margin: 0; color: #0f172a; font-size: 24px; }
+        .title-group h2 { margin: 0; color: #0f172a; font-size: 20px; }
         .status-badge { display: inline-flex; align-items: center; font-size: 12px; padding: 4px 10px; border-radius: 20px; background: #e2e8f0; color: #64748b; margin-top: 5px; }
         .dot { width: 8px; height: 8px; background: #ef4444; border-radius: 50%; margin-right: 6px; transition: 0.3s; }
         .dot.active { background: #22c55e; box-shadow: 0 0 8px #22c55e; }
@@ -34,44 +34,69 @@
         /* Card Design */
         .card { background: white; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); overflow: hidden; border: 1px solid #e2e8f0; }
 
-        /* --- Beautiful Bordered Table --- */
-        .table-container { overflow-x: auto; }
-        table { width: 100%; border-collapse: collapse; min-width: 800px; }
+        /* Fixed Layout Table */
+        .table-container { 
+            width: 100%; 
+            overflow-x: hidden;
+        }
+        
+        table { 
+            width: 100%; 
+            table-layout: fixed;
+            border-collapse: collapse; 
+        }
         
         thead { background: #f8fafc; }
+        
         th { 
-            padding: 16px; 
+            padding: 12px 8px; 
             text-align: left; 
             font-weight: 600; 
             color: var(--text-head); 
-            border: 1px solid var(--border-color);
+            border-bottom: 2px solid var(--border-color);
             white-space: nowrap;
+            font-size: 13px;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
         
         td { 
-            padding: 14px 16px; 
-            border: 1px solid var(--border-color);
+            padding: 12px 8px; 
+            border-bottom: 1px solid var(--border-color);
             vertical-align: middle;
-            white-space: nowrap; /* 🔥 บังคับไม่ให้ตัดบรรทัด 🔥 */
+            font-size: 13px;
+            white-space: nowrap; 
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
-        tr:hover td { background-color: #f1f5f9; cursor: default; }
+        tr:hover td { background-color: #f8fafc; cursor: default; }
 
         /* Badges */
-        .badge { padding: 4px 12px; border-radius: 6px; font-size: 13px; font-weight: 600; text-transform: capitalize; }
+        .badge { padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: capitalize; display: inline-block; min-width: 60px; text-align: center;}
         .badge.approved { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
         .badge.rejected { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
         .badge.pending { background: #fef9c3; color: #854d0e; border: 1px solid #fde047; }
 
         /* Buttons */
-        .btn { padding: 8px 16px; border-radius: 6px; border: none; cursor: pointer; font-weight: 500; transition: 0.2s; font-family: 'Sarabun'; display: inline-flex; align-items: center; gap: 6px; }
+        .btn { padding: 8px 12px; border-radius: 6px; border: none; cursor: pointer; font-weight: 500; transition: 0.2s; font-family: 'Sarabun'; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
         .btn:active { transform: scale(0.96); }
         .btn-primary { background: var(--primary); color: white; box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2); }
         .btn-secondary { background: white; border: 1px solid var(--border-color); color: var(--text-body); }
         .btn:disabled { opacity: 0.7; cursor: not-allowed; }
 
+        /* Download Button */
+        .btn-img { 
+            background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; 
+            padding: 6px 12px; border-radius: 6px; font-size: 12px; cursor: pointer; 
+            display: inline-flex; align-items: center; gap: 5px; font-weight: 500;
+            transition: 0.2s; font-family: 'Sarabun';
+        }
+        .btn-img:hover { background: #dbeafe; transform: translateY(-1px); }
+        .btn-img:active { transform: translateY(0); }
+
         /* Action Buttons */
-        .action-btn { width: 32px; height: 32px; border-radius: 6px; border: none; display: inline-flex; align-items: center; justify-content: center; margin: 0 2px; cursor: pointer; color: white; transition: 0.2s; }
+        .action-btn { width: 26px; height: 26px; border-radius: 4px; border: none; display: inline-flex; align-items: center; justify-content: center; margin: 0 1px; cursor: pointer; color: white; transition: 0.2s; font-size: 11px; }
         .action-btn:hover { opacity: 0.9; transform: translateY(-1px); }
         .btn-check { background: #22c55e; }
         .btn-edit { background: #f59e0b; }
@@ -82,16 +107,19 @@
         #loader { position: fixed; top: 0; left: 0; width: 100%; height: 3px; background: transparent; z-index: 9999; }
         #loader .bar { width: 0%; height: 100%; background: var(--primary); transition: width 0.3s; }
 
-        /* Mobile Responsive */
+        /* Mobile Responsive - Card View */
         @media (max-width: 768px) {
             thead { display: none; }
-            tr, td { display: block; border: none; }
-            tr { border: 1px solid var(--border-color); margin-bottom: 15px; border-radius: 8px; padding: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-            td { padding: 8px 0; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed #e2e8f0; }
-            td:last-child { border-bottom: none; display: block; padding-top: 15px; }
-            td::before { content: attr(data-label); font-weight: 600; color: #64748b; }
+            table { table-layout: auto; display: block; }
+            tbody { display: block; }
+            tr { display: block; border: 1px solid var(--border-color); margin-bottom: 10px; border-radius: 8px; padding: 12px; background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
+            td { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border: none; border-bottom: 1px dashed #e2e8f0; white-space: normal; overflow: visible; text-overflow: clip; }
+            td:last-child { border-bottom: none; padding-top: 12px; }
+            td::before { content: attr(data-label); font-weight: 600; color: #64748b; font-size: 12px; margin-right: 10px; min-width: 60px; }
+            
             .header { flex-direction: column; align-items: flex-start; }
-            .header > div { display: flex; flex-wrap: wrap; gap: 5px; }
+            .header > div { display: flex; width: 100%; gap: 5px; }
+            .btn { flex: 1; justify-content: center; }
         }
     </style>
 </head>
@@ -102,15 +130,15 @@
 <div class="container">
     <div class="header">
         <div class="title-group">
-            <h2><i class="fas fa-user-shield"></i> Admin Dashboard</h2>
+            <h2><i class="fas fa-user-shield"></i> Admin Dashboard</h2> 
             <div class="status-badge"><span class="dot" id="liveDot"></span> <span id="liveText">Connecting...</span></div>
         </div>
         <div>
             <button onclick="forceRefresh()" class="btn btn-secondary" id="btnRefresh">
-                <i class="fas fa-sync" id="iconRefresh"></i> รีเฟรช
+                <i class="fas fa-sync" id="iconRefresh"></i>
             </button>
-            <button onclick="manualAdd()" class="btn btn-primary"><i class="fas fa-plus"></i> เพิ่มกิจกรรม</button>
-            <button onclick="location.href='dashboard.html'" class="btn btn-secondary"><i class="fas fa-home"></i> กลับหน้าหลัก</button>
+            <button onclick="manualAdd()" class="btn btn-primary"><i class="fas fa-plus"></i> เพิ่ม</button>
+            <button onclick="location.href='index.html'" class="btn btn-secondary"><i class="fas fa-home"></i></button>
         </div>
     </div>
 
@@ -119,13 +147,13 @@
             <table id="adminTable">
                 <thead>
                     <tr>
-                        <th width="20%">ชื่อ / รหัส</th>
-                        <th width="25%">กิจกรรม</th>
-                        <th width="15%">สถานที่</th>
-                        <th width="8%">ชม.</th>
-                        <th width="10%">หลักฐาน</th>
-                        <th width="10%">สถานะ</th>
-                        <th width="12%">จัดการ</th>
+                        <th style="width: 18%;">ชื่อ/รหัส</th>
+                        <th style="width: 20%;">กิจกรรม</th>
+                        <th style="width: 15%;">สถานที่</th>
+                        <th style="width: 8%;">ชม.</th>
+                        <th style="width: 16%;">หลักฐาน</th>
+                        <th style="width: 10%;">สถานะ</th>
+                        <th style="width: 13%;">จัดการ</th>
                     </tr>
                 </thead>
                 <tbody id="tableBody">
@@ -148,14 +176,8 @@
     // --- MAIN ---
     window.onload = function() {
         if(!localStorage.getItem('volunteerSession')) window.location.href = 'index.html';
-
-        // 1. Instant Cache Load
         loadFromCache();
-
-        // 2. Network Load
         forceRefresh(true);
-
-        // 3. Auto Sync
         setInterval(() => loadAPI(true), 4000);
     };
 
@@ -246,7 +268,6 @@
 
         allLogs = mapped;
         allLogs.sort((a,b) => new Date(b.ts || b.date) - new Date(a.ts || a.date));
-        
         saveToCache(allLogs);
         renderTable();
         updateStatus('Live Sync Active', 'active');
@@ -259,34 +280,37 @@
         let html = '';
         allLogs.forEach(d => {
             const badgeClass = d.status === 'approved' ? 'approved' : (d.status === 'rejected' ? 'rejected' : 'pending');
-            const badgeText = d.status === 'approved' ? 'อนุมัติแล้ว' : (d.status === 'rejected' ? 'ปฏิเสธ' : 'รอตรวจสอบ');
+            const badgeText = d.status === 'approved' ? 'อนุมัติ' : (d.status === 'rejected' ? 'ปฏิเสธ' : 'รอ');
             const bgRow = d.status === 'pending' ? 'background:#fffbeb;' : '';
 
-            // ใช้ div ครอบ activity และ place เพื่อจำกัดความกว้างและตัดคำด้วย ... (Ellipsis)
+            // Image Button - Download Only
+            let imgBtns = '<span style="color:#cbd5e1; font-size:11px;">-</span>';
+            if(d.img) {
+                imgBtns = `
+                <button onclick="downloadImage('${d.img}', 'evidence-${d.studentId}-${d.id}')" class="btn-img" title="ดาวน์โหลด" style="display:inline-flex;">
+                    <i class="fas fa-download"></i> ดาวน์โหลด
+                </button>`;
+            }
+
             html += `
             <tr style="${bgRow}">
                 <td data-label="ชื่อ">
                     <div style="font-weight:600; color:#1e293b;">${d.name}</div>
-                    <div style="font-size:12px; color:#64748b;">${d.studentId || '-'}</div>
-                    <div style="font-size:12px; color:#94a3b8;">${d.date}</div>
+                    <div style="font-size:11px; color:#64748b;">${d.studentId || '-'}</div>
                 </td>
-                <td data-label="กิจกรรม">
-                    <div style="max-width: 250px; overflow: hidden; text-overflow: ellipsis;" title="${d.activity}">
-                        ${d.activity}
-                    </div>
+                <td data-label="กิจกรรม" title="${d.activity}">
+                    ${d.activity}
                 </td>
-                <td data-label="สถานที่">
-                    <div style="max-width: 150px; overflow: hidden; text-overflow: ellipsis;" title="${d.place}">
-                        ${d.place}
-                    </div>
+                <td data-label="สถานที่" title="${d.place}">
+                    ${d.place}
                 </td>
                 <td data-label="ชม." style="font-weight:bold; color:#2563eb;">${d.hours}</td>
                 <td data-label="หลักฐาน">
-                    ${d.img ? `<a href="${d.img}" target="_blank" style="color:#2563eb; text-decoration:none;"><i class="fas fa-image"></i> รูปภาพ</a>` : '-'}
+                    ${imgBtns}
                 </td>
                 <td data-label="สถานะ"><span class="badge ${badgeClass}">${badgeText}</span></td>
                 <td data-label="จัดการ">
-                    <div style="display:flex; justify-content: flex-end; gap:4px;">
+                    <div style="display:flex; gap:2px; justify-content:flex-start;">
                         ${d.status !== 'approved' ? 
                         `<button class="action-btn btn-check" onclick="doAction('approve', '${d.id}', ${d.hours}, '${d.userId}')" title="อนุมัติ"><i class="fas fa-check"></i></button>` : ''}
                         <button class="action-btn btn-edit" onclick="editItem('${d.id}')" title="แก้ไข"><i class="fas fa-pen"></i></button>
@@ -297,6 +321,88 @@
             </tr>`;
         });
         tbody.innerHTML = html;
+    }
+
+    // --- Image Download Function (Enhanced for Google Drive) ---
+    async function downloadImage(url, filename) {
+        // Extract Google Drive file ID
+        let fileId = null;
+        
+        if (url.includes('drive.google.com')) {
+            // Match different Google Drive URL formats
+            const patterns = [
+                /\/d\/([a-zA-Z0-9_-]+)/,  // /d/FILE_ID/
+                /id=([a-zA-Z0-9_-]+)/,     // ?id=FILE_ID
+                /\/file\/d\/([a-zA-Z0-9_-]+)/ // /file/d/FILE_ID
+            ];
+            
+            for (const pattern of patterns) {
+                const match = url.match(pattern);
+                if (match && match[1]) {
+                    fileId = match[1];
+                    break;
+                }
+            }
+        }
+
+        // If it's a Google Drive file, use direct download link
+        if (fileId) {
+            const directUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
+            
+            // Show loading toast
+            Swal.fire({
+                title: 'กำลังดาวน์โหลด...',
+                text: 'กรุณารอสักครู่',
+                allowOutsideClick: false,
+                didOpen: () => { Swal.showLoading(); }
+            });
+
+            try {
+                // Try to fetch and download as blob
+                const response = await fetch(directUrl, { 
+                    method: 'GET',
+                    mode: 'cors'
+                });
+                
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const blobUrl = window.URL.createObjectURL(blob);
+                    
+                    const link = document.createElement('a');
+                    link.href = blobUrl;
+                    link.download = filename + '.jpg';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    window.URL.revokeObjectURL(blobUrl);
+                    
+                    Swal.close();
+                    Swal.fire({ icon: 'success', title: 'ดาวน์โหลดสำเร็จ', timer: 1500, showConfirmButton: false });
+                    return;
+                }
+            } catch (error) {
+                console.warn('Fetch failed, using fallback method:', error);
+            }
+
+            // Fallback: Open in new window with download parameter
+            Swal.close();
+            window.open(directUrl, '_blank');
+            Swal.fire({ 
+                icon: 'info', 
+                title: 'เปิดหน้าดาวน์โหลด', 
+                text: 'หากไม่ดาวน์โหลดอัตโนมัติ คลิกขวา > Save Image As',
+                timer: 3000 
+            });
+        } else {
+            // For non-Google Drive URLs
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename + '.jpg';
+            link.target = '_blank';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
     }
 
     async function doAction(type, id, val1, val2) {

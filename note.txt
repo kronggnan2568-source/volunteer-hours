@@ -1,0 +1,13 @@
+npm install -g vercel
+
+vercel logout
+
+vercel login
+
+vercel
+
+vercel --prod
+
+
+
+

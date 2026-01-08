@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>บันทึกกิจกรรม - จิตอาสา</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@200;300;400;600&display=swap" rel="stylesheet">
+
+    <style>
+        /* CSS เดิมจาก dashboard.html */
+        body { font-family: 'Sarabun', sans-serif; font-weight: 200; }
+        .btn-custom { border: none; padding: 8px 15px; font-size: 14px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15); transition: transform 0.2s; color: white; white-space: nowrap; height: 40px; width: auto !important; margin: 0 !important; }
+        .btn-green { background-color: #4CAF50 !important; }
+        .btn-orange { background-color: #D9822B !important; }
+        .btn-blue { background-color: #3498db !important; }
+        .btn-custom:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3); filter: brightness(1.1); }
+        
+        /* เพิ่มสไตล์สำหรับปุ่มเมนูที่ถูกเลือก */
+        .menu-grid button.active {
+            background-color: #3498db; /* สีฟ้าเข้มขึ้น */
+            color: white;
+            border: 2px solid #2980b9;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div class="nav-bar">
+            <h3>👋 สวัสดี, <span id="userNameDisplay">...</span></h3>
+            <button onclick="logout()" class="danger" style="width:auto; padding: 8px 15px; font-size:14px;">
+                <i class="fas fa-sign-out-alt"></i> ออก
+            </button>
+        </div>
+
+        <div id="activityList">
+            <div class="card">
+                <h3>📝 บันทึกกิจกรรมจิตอาสา</h3>
+                <div class="form-group">
+                    <label>ชื่อ-นามสกุล ผู้ทำกิจกรรม:</label>
+                    <input type="text" id="actUserName" placeholder="ชื่อ-นามสกุล">
+                </div>
+                <div class="form-group">
+                    <label>รายละเอียดกิจกรรม:</label>
+                    <input type="text" id="actName" placeholder="ชื่อกิจกรรม">
+                    <input type="text" id="actPlace" placeholder="สถานที่" style="margin-top: 5px;">
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label>วันที่:</label><input type="date" id="actDate"></div>
+                    <div class="form-group"><label>เวลา:</label><input type="time" id="actTime"></div>
+                    <div class="form-group"><label>จำนวนชั่วโมง:</label><input type="number" id="actHours" placeholder="ชม." step="0.5" min="0"></div>
+                </div>
+                <div class="form-group">
+                    <label>ผู้รับผิดชอบ:</label>
+                    <input type="text" id="actPerson" placeholder="ชื่อผู้รับผิดชอบ/ผู้เซ็นรับรอง">
+                </div>
+                <div class="form-group">
+                    <label>แนบรูปภาพกิจกรรม:</label>
+                    <input type="file" id="actImage" accept="image/*" style="padding:10px; background:#fff;">
+                </div>
+                <button id="btnSubmitActivity" onclick="submitActivity()"><i class="fas fa-save"></i> บันทึกข้อมูล</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = "https://script.google.com/macros/s/AKfycbwDYB9-YNqmcRyBPVi3twtY-lTD-V0kPOjSD0AsVjwljno6h8PuIrNSLvqd1PeVR23V/exec";
+        const UPLOAD_URL = API_URL;
+        let currentUser = null;
+        let userData = null;
+
+        window.onload = function () {
+            const session = getSession();
+            if (!session) {
+                window.location.href = "index.html";
+                return;
+            }
+            currentUser = session.user;
+            loadUserData();
+        };
+
+        function getSession() {
+            const sessionStr = localStorage.getItem('volunteerSession');
+            if (!sessionStr) return null;
+            try {
+                const session = JSON.parse(sessionStr);
+                const now = new Date().getTime();
+                if ((now - session.timestamp) > (24 * 60 * 60 * 1000)) return null;
+                return session;
+            } catch (e) { return null; }
+        }
+
+        function saveSession(user) {
+            localStorage.setItem('volunteerSession', JSON.stringify({ user: user, timestamp: new Date().getTime() }));
+        }
+
+        async function loadUserData() {
+            try {
+                // โหลดข้อมูลผู้ใช้เพื่อแสดงชื่อ
+                document.getElementById('userNameDisplay').innerText = currentUser.name || "ผู้ใช้";
+                document.getElementById('actUserName').value = currentUser.name || "";
+                
+                // ดึงข้อมูลล่าสุดจาก API เพื่อความชัวร์ (เผื่อมีการแก้ไขชื่อจากหน้าอื่น)
+                const response = await fetch(`${API_URL}?action=getUser&uid=${currentUser.uid}`);
+                const result = await response.json();
+                if (result.status === 'success') {
+                    userData = result.user;
+                    currentUser = result.user; 
+                    saveSession(result.user);
+                    
+                    document.getElementById('userNameDisplay').innerText = userData.name || "ผู้ใช้";
+                    document.getElementById('actUserName').value = userData.name || "";
+                }
+            } catch (error) { console.error(error); }
+        }
+
+        async function submitActivity() {
+            const userName = document.getElementById('actUserName').value.trim();
+            const name = document.getElementById('actName').value.trim();
+            const place = document.getElementById('actPlace').value.trim();
+            const date = document.getElementById('actDate').value;
+            const time = document.getElementById('actTime').value;
+            const hours = parseFloat(document.getElementById('actHours').value);
+            const person = document.getElementById('actPerson').value.trim();
+            const file = document.getElementById('actImage').files[0];
+
+            if (!userName || !name || !date || !time || !hours || !file) {
+                return Swal.fire('ข้อมูลไม่ครบ', 'กรุณากรอกให้ครบและแนบรูป', 'warning');
+            }
+
+            const btn = document.getElementById('btnSubmitActivity');
+            const oldText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = "<i class='fas fa-spinner fa-spin'></i> กำลังบันทึก...";
+
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = async function () {
+                try {
+                    const base64Data = reader.result.split(',')[1];
+                    const uploadRes = await fetch(UPLOAD_URL, {
+                        method: 'POST',
+                        body: JSON.stringify({ base64: base64Data, mimeType: file.type, filename: `${currentUser.uid}_${Date.now()}` })
+                    });
+                    const uploadResult = await uploadRes.json();
+                    if (uploadResult.status !== "success") throw new Error("Upload Failed");
+
+                    const actRes = await fetch(API_URL, {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            action: 'createActivity', userId: currentUser.uid, userName: userName, studentId: userData?.studentId || '',
+                            activityName: name, place: place, date: date, time: time, hours: hours, personInCharge: person,
+                            imageUrl: uploadResult.url, status: 'pending'
+                        })
+                    });
+                    const actResult = await actRes.json();
+
+                    if (actResult.status === 'success') {
+                        Swal.fire('สำเร็จ', 'บันทึกเรียบร้อย', 'success').then(() => {
+                            // รีเซ็ตฟอร์ม
+                            document.getElementById('actName').value = '';
+                            document.getElementById('actPlace').value = '';
+                            document.getElementById('actHours').value = '';
+                            document.getElementById('actImage').value = '';
+                            // ถามว่าต้องการไปหน้าประวัติไหม
+                            Swal.fire({
+                                title: 'บันทึกเสร็จสิ้น',
+                                text: "ต้องการไปดูประวัติกิจกรรมเลยหรือไม่?",
+                                icon: 'question',
+                                showCancelButton: true,
+                                confirmButtonText: 'ไปดูประวัติ',
+                                cancelButtonText: 'บันทึกต่อ'
+                            }).then((result) => {
+                                if (result.isConfirmed) {
+                                    window.location.href = 'history.html';
+                                }
+                            });
+                        });
+                    } else {
+                        throw new Error(actResult.message || 'Error saving activity');
+                    }
+                } catch (e) {
+                    Swal.fire('Error', e.message, 'error');
+                } finally {
+                    btn.disabled = false;
+                    btn.innerHTML = oldText;
+                }
+            };
+        }
+
+        function logout() {
+            localStorage.removeItem('volunteerSession');
+            window.location.href = "index.html";
+        }
+    </script>
+</body>
+</html>
